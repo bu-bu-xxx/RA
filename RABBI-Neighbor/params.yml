@@ -1,0 +1,31 @@
+product_number: 3
+resource_number: 2
+resource_matrix:
+  - [1, 0]
+  - [0, 1]
+  - [1, 1]
+price_set_matrix:
+  - [10, 12, 15]
+  - [8, 10, 13, 16]
+  - [5, 7, 9, 11, 14]
+horizon: 20
+budget: [10, 8]
+scaling_list: [1, 2, 5]
+demand_model: "MNL"
+demand_model_params:
+  - [0.5, 0.3, 0.2]
+  - [0.4, 0.4, 0.2]
+  - [0.3, 0.5, 0.2]
+
+# MNL demand function parameters
+d: [2.0, 1.5, 1.0]   # 产品吸引力向量，长度为product_number
+mu: 1.0              # 理性参数，正数
+
+# Linear demand function parameters
+psi: [10, 8, 6]      # 截距向量，长度为product_number
+# theta为3x3矩阵，主对角线为-0.5，非对角线为-0.1
+# 代表每个产品对自身价格敏感，对其他产品价格也有影响
+theta:
+  - [-0.5, -0.1, -0.1]
+  - [-0.1, -0.5, -0.1]
+  - [-0.1, -0.1, -0.5]
