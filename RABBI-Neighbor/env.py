@@ -32,6 +32,11 @@ class DynamicPricingEnv(ParamsLoader):
         执行一步动作（j），更新环境状态。
         j: int, 0~(n-1)，表示顾客t时间购买的产品编号
         alpha: int, 0~(m-1)，表示顾客t时间选择的价格集编号
+        history:
+        - self.reward_history: 奖励历史
+        - self.b_history: 库存历史
+        - self.j_history: 产品选择历史
+        - self.alpha_history: 价格集选择历史
         返回: obs, reward, done, info
         """
         reward = 0

@@ -7,7 +7,7 @@ class CustomerChoiceSimulator(DynamicPricingEnv):
     def __init__(self, yaml_path, random_seed=None):
         super().__init__(yaml_path, random_seed=random_seed)
         self.Y = None  # (T, m)
-        self.Q = None        # (T, n, m)
+        self.Q = None  # (T, n, m)
 
     def generate_choice_matrix(self):
         """
@@ -41,12 +41,12 @@ class CustomerChoiceSimulator(DynamicPricingEnv):
         self.Q = Q
         return Q
 
-    def save_Q(self, Q, filename):
-        np.save(filename, Q)
+    def save_Y(self, Y, filename):
+        np.save(filename, Y)
 
-    def load_Q(self, filename):
-        self.Q = np.load(filename)
-        return self.Q
+    def load_Y(self, filename):
+        self.Y = np.load(filename)
+        return self.Y
 
 # 示例用法
 if __name__ == "__main__":
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     # 保存和读取Q示例
     data_dir = os.path.join(os.getcwd(), "data")
     os.makedirs(data_dir, exist_ok=True)
-    Q_path = os.path.join(data_dir, "Q_matrix.npy")
-    sim.save_Q(Q, Q_path)
-    Q_loaded = sim.load_Q(Q_path)
-    print("读取后的Q矩阵 shape:", Q_loaded.shape)
+    Y_path = os.path.join(data_dir, "Y_matrix_debug.npy")
+    sim.save_Y(Q, Y_path)
+    Y_loaded = sim.load_Y(Y_path)
+    print("读取后的Y矩阵 shape:", Y_loaded.shape)

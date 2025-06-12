@@ -5,9 +5,11 @@ class LPBasedPolicy:
     def __init__(self, env):
         """
         env: CustomerChoiceSimulator 实例
+        history:
+        - x_history: 存储每一步的x向量 (T, m)
         """
         self.env = env
-        self.x_history = []  # 存储每一步的x向量 (T, m)
+        self.env.x_history = []  # 存储每一步的x向量 (T, m)
         self.env.reset()
 
 class RABBI(LPBasedPolicy):
@@ -54,16 +56,16 @@ class RABBI(LPBasedPolicy):
         """
         env = self.env
         env.reset()
-        choices = env.choices if env.choices is not None else env.generate_choice_matrix()
+        Y = env.Y if hasattr(env, 'Y') and env.Y is not None else env.generate_choice_matrix()
         b = env.B.copy()
         for t in range(env.T):
             p_t = env.p  # 每一步都用env.p
             x_t = self.solve_lp(b, p_t, t)  
-            self.x_history.append(x_t)
+            env.x_history.append(x_t)
             alpha = int(np.argmax(x_t))
-            action = choices[t, alpha]
-            _, _, done, _ = env.step(action, alpha)
-            b = env.inventory.copy()
+            j = Y[t, alpha]
+            _, _, done, _ = env.step(j, alpha)
+            b = env.b.copy()
             if done:
                 break
 
@@ -76,6 +78,6 @@ if __name__ == "__main__":
     sim.generate_choice_matrix()
     rabbi = RABBI(sim)
     rabbi.run()
-    print("x_history shape:", np.array(rabbi.x_history).shape)
-    print("alpha_history:", rabbi.alpha_history)
-    print("action_history:", rabbi.action_history)
+    print("x_history shape:", np.array(sim.x_history).shape)
+    print("alpha_history:", sim.alpha_history)
+    print("j_history:", sim.j_history)
