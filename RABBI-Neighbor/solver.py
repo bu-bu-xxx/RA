@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import linprog
+from scipy.optimize import linprog, minimize
 import traceback
 
 class LPBasedPolicy:
@@ -109,6 +109,180 @@ class OFFline(LPBasedPolicy):
             b = env.b.copy()
             if done:
                 break
+
+class NPlusOneLP(LPBasedPolicy):
+    def __init__(self, env):
+        super().__init__(env)
+        self.n = env.n  # 产品数量
+        self.d = env.d  # 资源种类数量
+        self.b = env.b  # 当前库存 (d维向量)
+        self.price_grid = env.f_split  # 离散价格集合 (列表的列表)
+        self.d_attract = env.mnl.d  # 产品吸引力参数
+        self.mu = env.mnl.mu  # MNL尺度参数
+        self.u0 = env.mnl.u0  # 不购买选项的效用
+        self.gamma = env.mnl.gamma  # 顾客到达率
+        
+    @staticmethod
+    def mnl_demand(prices, d, mu, u0=0, gamma=1.0):
+        """
+        计算MNL需求
+        :param prices: 价格向量 [p1, p2, ..., pN]
+        :param d: 产品吸引力向量 [d1, d2, ..., dN]
+        :param mu: 理性参数 (μ > 0)
+        :param u0: 不购买的效用
+        :param gamma: 概率缩放系数
+        :return: 需求向量 [λ1, λ2, ..., λN]
+        """
+        exponents = np.exp((np.array(d) - np.array(prices)) / mu)
+        denominator = np.sum(exponents) + np.exp(u0 / mu)
+        return gamma * exponents / denominator
+    
+    def solve_continuous_relaxation(self):
+        """
+        步骤1: 求解连续松弛问题 (P_C)
+        :return: 最优连续价格向量 p_star
+        """
+        # 定义目标函数 (最大化收益 = 最小化负收益)
+        def objective(p):
+            demand = self.mnl_demand(p, self.d_attract, self.mu, self.u0, self.gamma)
+            return -np.dot(p, demand)  # 负号用于最小化
+        
+        # 定义约束条件: A * λ(p) <= b
+        def constraint(p):
+            demand = self.mnl_demand(p, self.d_attract, self.mu, self.u0, self.gamma)
+            return self.b - np.dot(self.env.A, demand)  # 必须 >= 0
+        
+        # 价格上下界
+        bounds = [(min(prices), max(prices)) for prices in self.price_grid]
+        
+        # 初始点 (取每个产品价格范围的中点)
+        x0 = [np.mean(prices) for prices in self.price_grid]
+        
+        # 约束定义
+        cons = [{'type': 'ineq', 'fun': constraint}]
+        
+        # 求解连续松弛问题
+        res = minimize(objective, x0, bounds=bounds, constraints=cons)
+        
+        if not res.success:
+            raise ValueError(f"连续松弛问题求解失败: {res.message}")
+            
+        return res.x
+    
+    def find_neighbors(self, p_star):
+        """
+        步骤2: 找到每个产品的最优连续价格对应的离散价格邻居
+        :param p_star: 最优连续价格向量
+        :return: 邻居价格向量列表 (N+1个)
+        """
+        neighbors = []
+        # 找到每个产品的上下界离散价格
+        lower_bounds = []
+        upper_bounds = []
+        
+        for i in range(self.n):
+            prices = self.price_grid[i]
+            # 找到下界 (小于等于p_star[i]的最大值)
+            lower = max([p for p in prices if p <= p_star[i]], default=min(prices))
+            # 找到上界 (大于等于p_star[i]的最小值)
+            upper = min([p for p in prices if p >= p_star[i]], default=max(prices))
+            lower_bounds.append(lower)
+            upper_bounds.append(upper)
+        
+        # 构造邻居向量 (N+1个)
+        # 前N个: 每个位置依次使用上界，其余使用下界
+        for i in range(self.n):
+            neighbor = [lower_bounds[j] if j != i else upper_bounds[j] for j in range(self.n)]
+            neighbors.append(neighbor)
+        
+        # 第N+1个: 所有产品都使用下界
+        neighbors.append(lower_bounds)
+        
+        return neighbors
+    
+    def solve_n_plus_one_lp(self, neighbors):
+        """
+        步骤3: 求解(N+1) LP问题
+        :param neighbors: 邻居价格向量列表
+        :return: 最优时间分配比例 zeta_star
+        """
+        num_neighbors = len(neighbors)
+        
+        # 计算每个邻居的需求向量和收益
+        demands = []
+        revenues = []
+        
+        for neighbor in neighbors:
+            demand = self.mnl_demand(neighbor, self.d_attract, self.mu, self.u0, self.gamma)
+            demands.append(demand)
+            revenues.append(np.dot(neighbor, demand))
+        
+        # 构建线性规划问题
+        # 目标函数: 最大化收益
+        c = -np.array(revenues)  # 负号用于最小化
+        
+        # 约束: A * (∑ζ_i * λ_i) <= b
+        # 计算每个资源约束的系数
+        A_ub = []
+        for k in range(self.d):
+            row = []
+            for i in range(num_neighbors):
+                # 计算第i个邻居对资源k的消耗
+                resource_consumption = np.dot(self.env.A[k], demands[i])
+                row.append(resource_consumption)
+            A_ub.append(row)
+        
+        # 添加时间总和约束: ∑ζ_i = 1
+        A_eq = [np.ones(num_neighbors)]
+        b_eq = [1]
+        
+        # 变量边界: 0 <= ζ_i <= 1
+        bounds = [(0, 1)] * num_neighbors
+        
+        # 求解线性规划
+        res = linprog(c, A_ub=A_ub, b_ub=self.b, A_eq=A_eq, b_eq=b_eq, bounds=bounds)
+        
+        if not res.success:
+            raise ValueError(f"(N+1) LP求解失败: {res.message}")
+            
+        return res.x
+    
+    def get_pricing_policy(self):
+        """
+        获取定价策略
+        :return: (邻居价格向量, 最优时间分配比例)
+        """
+        # 步骤1: 求解连续松弛问题
+        p_star = self.solve_continuous_relaxation()
+        
+        # 步骤2: 找到邻居价格向量
+        neighbors = self.find_neighbors(p_star)
+        
+        # 步骤3: 求解(N+1) LP
+        zeta_star = self.solve_n_plus_one_lp(neighbors)
+        
+        return neighbors, zeta_star
+    
+    def implement_policy(self, current_time, time_remaining):
+        """
+        实现定价策略 (在动态定价环境中使用)
+        :param current_time: 当前时间
+        :param time_remaining: 剩余时间
+        :return: 当前应设置的价格向量
+        """
+        # 获取定价策略
+        neighbors, zeta_star = self.get_pricing_policy()
+        
+        # 计算累积时间比例
+        cumulative_time = 0
+        for i, zeta in enumerate(zeta_star):
+            cumulative_time += zeta
+            if current_time <= cumulative_time:
+                return neighbors[i]
+        
+        # 如果时间超出范围，返回最后一个邻居
+        return neighbors[-1]
+
 
 # 示例用法
 if __name__ == "__main__":

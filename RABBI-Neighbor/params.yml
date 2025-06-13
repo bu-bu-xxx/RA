@@ -13,18 +13,18 @@ budget: [10, 8]
 scaling_list: [1, 2, 5]
 demand_model: "MNL"
 
-# MNL demand function parameters
-d: [10.0, 8, 12]   # 产品吸引力向量，长度为product_number
-mu: 10.0              # 理性参数，正数
-u0: 0                # 不购买的效用，默认0
+MNL:
+  d: [10.0, 8, 12]   # 产品吸引力向量，长度为product_number
+  mu: 10.0           # 理性参数，正数
+  u0: 0              # 不购买的效用，默认0
+  gamma: 1.0         # 价格敏感度，正数
 
-# Linear demand function parameters
-psi: [10, 8, 6]      # 截距向量，长度为product_number
-# theta为3x3矩阵，主对角线为-0.5，非对角线为-0.1
+Linear:
+  psi: [10, 8, 6]    # 截距向量，长度为product_number
+  theta:
+    - [-0.5, -0.1, -0.1]
+    - [-0.1, -0.5, -0.1]
+    - [-0.1, -0.1, -0.5]
+
 # 代表每个产品对自身价格敏感，对其他产品价格也有影响
-theta:
-  - [-0.5, -0.1, -0.1]
-  - [-0.1, -0.5, -0.1]
-  - [-0.1, -0.1, -0.5]
-
-tolerance: 1e-4  
+tolerance: 1e-4

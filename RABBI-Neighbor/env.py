@@ -9,6 +9,9 @@ class DynamicPricingEnv(ParamsLoader):
         self.reset()
         if random_seed is not None:
             np.random.seed(random_seed)
+        # 适配MNL和Linear参数
+        self.mnl = getattr(self, 'mnl', None)
+        self.linear = getattr(self, 'linear', None)
 
     def reset(self):
         """重置环境到初始状态"""

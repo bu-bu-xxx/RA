@@ -18,19 +18,26 @@ class ParamsLoader:
         self.check_A_matrix()
 
         self.demand_model = params.get('demand_model', 'MNL')  # 默认使用MNL模型
+        self.tolerance = float(params.get('tolerance', 1e-4))
+        self.mnl = type('MNLParams', (), {})()
+        self.linear = type('LinearParams', (), {})()
+        if 'MNL' in params:
+            self.mnl.d = params['MNL'].get('d')
+            self.mnl.mu = params['MNL'].get('mu')
+            self.mnl.u0 = params['MNL'].get('u0', 0)
+            self.mnl.gamma = params['MNL'].get('gamma', 1.0)  
+        if 'Linear' in params:
+            self.linear.psi = params['Linear'].get('psi')
+            self.linear.theta = params['Linear'].get('theta')
         # 自动读取需求参数并计算self.p (dim=n, m)
         if self.demand_model.upper() == 'MNL':
-            d = params.get('d')
-            mu = params.get('mu')
-            if d is None or mu is None:
-                raise ValueError('MNL模型需要在yaml中提供d(吸引力向量)和mu(理性参数)')
-            self.p = self.compute_demand_matrix(d=d, mu=mu)
+            if self.mnl.d is None or self.mnl.mu is None:
+                raise ValueError('MNL模型需要在yaml中提供MNL.d和MNL.mu')
+            self.p = self.compute_demand_matrix(d=self.mnl.d, mu=self.mnl.mu, u0=self.mnl.u0, tolerance=self.tolerance)
         elif self.demand_model.upper() == 'LINEAR':
-            psi = params.get('psi')
-            theta = params.get('theta')
-            if psi is None or theta is None:
-                raise ValueError('Linear模型需要在yaml中提供psi(截距)和theta(敏感度矩阵)')
-            self.p = self.compute_demand_matrix(psi=psi, theta=theta)
+            if self.linear.psi is None or self.linear.theta is None:
+                raise ValueError('Linear模型需要在yaml中提供Linear.psi和Linear.theta')
+            self.p = self.compute_demand_matrix(psi=self.linear.psi, theta=self.linear.theta, tolerance=self.tolerance)
         else:
             raise NotImplementedError(f'暂不支持的需求模型: {self.demand_model}')
 
@@ -55,19 +62,20 @@ class ParamsLoader:
             raise ValueError("A矩阵所有元素必须为非负数")
     
     @staticmethod
-    def mnl_demand(prices, d, mu, u0=0):
+    def mnl_demand(prices, d, mu, u0=0, gamma=1.0):
         """
         计算MNL需求
         :param prices: 价格向量 [p1, p2, ..., pN]
         :param d: 产品吸引力向量 [d1, d2, ..., dN]
         :param mu: 理性参数 (μ > 0)
         :param u0: 不购买的效用
+        :param gamma: 概率缩放系数
         :return: 需求向量 [λ1, λ2, ..., λN]
         """
         exponents = np.exp((np.array(d) - np.array(prices)) / mu)
         denominator = np.sum(exponents) + np.exp(u0 / mu)
-        return exponents / denominator 
-    
+        return gamma * exponents / denominator
+
     @staticmethod
     def linear_demand(prices, psi, theta):
         """
@@ -79,19 +87,20 @@ class ParamsLoader:
         """
         return np.array(psi) + np.dot(theta, np.array(prices))
 
-    def compute_mnl_demand_matrix(self, d, mu, u0=0, tolerance=1e-4):
+    def compute_mnl_demand_matrix(self, d, mu, u0=0, tolerance=1e-4, gamma=1.0):
         """
         计算MNL模型下的需求概率矩阵 self.p (n, m)
         :param d: 产品吸引力向量
         :param mu: 理性参数
         :param u0: 不购买的效用
         :param tolerance: 小于该值的概率置为0
+        :param gamma: 概率缩放系数
         """
         n, m = self.n, self.m
         p_matrix = np.zeros((n, m))
         for j in range(m):
             prices = self.f[:, j]
-            p_matrix[:, j] = self.mnl_demand(prices, d, mu, u0)
+            p_matrix[:, j] = self.mnl_demand(prices, d, mu, u0, gamma)
         p_matrix[np.abs(p_matrix) < tolerance] = 0
         self.p = p_matrix
         return p_matrix
@@ -115,16 +124,17 @@ class ParamsLoader:
     def compute_demand_matrix(self, **kwargs):
         """
         根据self.demand_model选择的模型，读取对应参数，对self.f每一列计算需求，输出self.p (n, m)
-        kwargs: 传递给需求模型的参数，如mu, d, psi, theta, u0, tolerance等
+        kwargs: 传递给需求模型的参数，如mu, d, psi, theta, u0, tolerance, gamma等
         """
         tolerance = kwargs.get('tolerance', 1e-4)
         if self.demand_model.upper() == 'MNL':
             d = kwargs.get('d')
             mu = kwargs.get('mu')
             u0 = kwargs.get('u0', 0)
+            gamma = kwargs.get('gamma', 1.0)
             if d is None or mu is None:
                 raise ValueError('MNL模型需要参数d(吸引力向量)和mu(理性参数)')
-            return self.compute_mnl_demand_matrix(d, mu, u0, tolerance)
+            return self.compute_mnl_demand_matrix(d, mu, u0, tolerance, gamma)
         elif self.demand_model.upper() == 'LINEAR':
             psi = kwargs.get('psi')
             theta = kwargs.get('theta')
