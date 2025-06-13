@@ -30,7 +30,7 @@ class DynamicPricingEnv(ParamsLoader):
     def step(self, j: int, alpha: int):
         """
         执行一步动作（j），更新环境状态。
-        j: int, 0~(n-1)，表示顾客t时间购买的产品编号
+        j: int, 0~(n-1)，表示顾客t时间购买的产品编号，-1表示未购买
         alpha: int, 0~(m-1)，表示顾客t时间选择的价格集编号
         history:
         - self.reward_history: 奖励历史
@@ -44,12 +44,23 @@ class DynamicPricingEnv(ParamsLoader):
         done = (self.t >= self.T)
         info = {}
 
+        # 支持-1表示未购买
+        if j == -1:
+            info['sold'] = False
+            self.reward_history.append(reward)
+            self.b_history.append(self.b.copy())
+            self.j_history.append(j)
+            self.alpha_history.append(alpha)
+            done = done or np.any(self.b < 0)
+            return self._get_obs(), reward, done, info
+
         # 检查动作是否有效
-        if j is None or not isinstance(j, int):
-            raise ValueError("j must be an integer representing the product index.")
+        if j is None:
+            print("j: ", j, "type: ", type(j))
+            raise ValueError("j must be an integer representing the product index or -1.")
         # 检查动作范围
         if j < 0 or j >= self.n:
-            raise ValueError(f"j must be in range [0, {self.n - 1}], but got {j}.")
+            raise ValueError(f"j must be in range [0, {self.n - 1}] or -1 (not buy), but got {j}.")
         
         # 检查库存是否足够
         if np.all(self.b - self.A[j] >= 0):

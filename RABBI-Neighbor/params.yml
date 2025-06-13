@@ -5,21 +5,18 @@ resource_matrix:
   - [0, 1]
   - [1, 1]
 price_set_matrix:
-  - [10, 12, 15]
-  - [8, 10, 13, 16]
-  - [5, 7, 9, 11, 14]
+  - [5, 10, 15, 100000000]
+  - [5, 15, 10000000]
+  - [10, 20, 100000000]
 horizon: 20
 budget: [10, 8]
 scaling_list: [1, 2, 5]
 demand_model: "MNL"
-demand_model_params:
-  - [0.5, 0.3, 0.2]
-  - [0.4, 0.4, 0.2]
-  - [0.3, 0.5, 0.2]
 
 # MNL demand function parameters
-d: [2.0, 1.5, 1.0]   # 产品吸引力向量，长度为product_number
-mu: 1.0              # 理性参数，正数
+d: [10.0, 8, 12]   # 产品吸引力向量，长度为product_number
+mu: 10.0              # 理性参数，正数
+u0: 0                # 不购买的效用，默认0
 
 # Linear demand function parameters
 psi: [10, 8, 6]      # 截距向量，长度为product_number
@@ -29,3 +26,5 @@ theta:
   - [-0.5, -0.1, -0.1]
   - [-0.1, -0.5, -0.1]
   - [-0.1, -0.1, -0.5]
+
+tolerance: 1e-4  
