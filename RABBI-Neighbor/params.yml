@@ -10,7 +10,7 @@ price_set_matrix:
   - [10, 20, 100000000]
 horizon: 20
 budget: [10, 8]
-scaling_list: [1, 2, 5]
+scaling_list: [1, 20, 100, 1000]
 demand_model: "MNL"
 
 MNL:
