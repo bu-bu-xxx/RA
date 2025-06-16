@@ -18,7 +18,7 @@ class ParamsLoader:
 
         # check dimensions
         self.check_A_matrix()
-        if self.f_split.shape[0] != self.n:
+        if self.f_split.__len__() != self.n:
             raise ValueError(f"价格集矩阵f_split的行数({self.f_split.shape[0]})应与产品数量n({self.n})一致")
         if self.B.shape[0] != self.d:
             raise ValueError(f"预算B的长度({self.B.shape[0]})应与资源数量d({self.d})一致")
@@ -28,15 +28,15 @@ class ParamsLoader:
         self.mnl = type('MNLParams', (), {})()
         self.linear = type('LinearParams', (), {})()
         if 'MNL' in params:
-            self.mnl.d = params['MNL'].get('d')
-            self.mnl.mu = params['MNL'].get('mu')
-            self.mnl.u0 = params['MNL'].get('u0', 0)
-            self.mnl.gamma = params['MNL'].get('gamma', 1.0)  
+            self.mnl.d = np.array(params['MNL'].get('d'), dtype=float)
+            self.mnl.mu = float(params['MNL'].get('mu'))
+            self.mnl.u0 = float(params['MNL'].get('u0', 0))
+            self.mnl.gamma = float(params['MNL'].get('gamma', 1.0))  
             if self.mnl.d.shape[0] != self.n:
                 raise ValueError(f"MNL.d的长度({self.mnl.d.shape[0]})应与产品数量n({self.n})一致")
         if 'Linear' in params:
-            self.linear.psi = params['Linear'].get('psi')
-            self.linear.theta = params['Linear'].get('theta')
+            self.linear.psi = np.array(params['Linear'].get('psi'), dtype=float)
+            self.linear.theta = np.array(params['Linear'].get('theta'), dtype=float)
         # 自动读取需求参数并计算self.p (dim=n, m)
         if self.demand_model.upper() == 'MNL':
             if self.mnl.d is None or self.mnl.mu is None:
