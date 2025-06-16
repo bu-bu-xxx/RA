@@ -15,8 +15,14 @@ class ParamsLoader:
         self.k = np.array(params['scaling_list'], dtype=float) # scaling list 
         self.f = self.generate_price_combinations(self.f_split) # (n, m) price matrix
         self.m = self.f.shape[1]  # 价格集数量
-        self.check_A_matrix()
 
+        # check dimensions
+        self.check_A_matrix()
+        if self.f_split.shape[0] != self.n:
+            raise ValueError(f"价格集矩阵f_split的行数({self.f_split.shape[0]})应与产品数量n({self.n})一致")
+        if self.B.shape[0] != self.d:
+            raise ValueError(f"预算B的长度({self.B.shape[0]})应与资源数量d({self.d})一致")
+        
         self.demand_model = params.get('demand_model', 'MNL')  # 默认使用MNL模型
         self.tolerance = float(params.get('tolerance', 1e-4))
         self.mnl = type('MNLParams', (), {})()
@@ -26,6 +32,8 @@ class ParamsLoader:
             self.mnl.mu = params['MNL'].get('mu')
             self.mnl.u0 = params['MNL'].get('u0', 0)
             self.mnl.gamma = params['MNL'].get('gamma', 1.0)  
+            if self.mnl.d.shape[0] != self.n:
+                raise ValueError(f"MNL.d的长度({self.mnl.d.shape[0]})应与产品数量n({self.n})一致")
         if 'Linear' in params:
             self.linear.psi = params['Linear'].get('psi')
             self.linear.theta = params['Linear'].get('theta')

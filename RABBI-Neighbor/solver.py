@@ -298,6 +298,23 @@ class NPlusOneLP(LPBasedPolicy):
         self._debug_print("[DEBUG][get_pricing_policy] zeta_star:", zeta_star, "shape:", np.shape(zeta_star))
         return neighbors, zeta_star
 
+    def map_zeta_to_xt(self, neighbors, zeta_star, env_f):
+        """
+        将zeta_star（neighbors的解）映射为x_t（env.f的解）。
+        :param neighbors: 邻居价格向量列表 (N+1, n)
+        :param zeta_star: 每个邻居的时间分配比例 (N+1,)
+        :param env_f: 环境中的所有价格列 (n, m)
+        :return: x_t (m,)
+        """
+        m = env_f.shape[1]
+        x_t = np.zeros(m)
+        for neighbor_idx, neighbor in enumerate(neighbors):
+            for idx in range(m):
+                if np.allclose(env_f[:, idx], neighbor):
+                    x_t[idx] = zeta_star[neighbor_idx]
+                    break  # 一个neighbor只对应一个env.f中的列
+        return x_t
+
     def run(self):
         """
         运行NPlusOneLP算法，自动推进T步，每步根据get_pricing_policy选择最优邻居价格
@@ -312,21 +329,14 @@ class NPlusOneLP(LPBasedPolicy):
             except Exception as e:
                 print(f"Error in get_pricing_policy at time {t}: {e}")
                 raise e
-            # 选择zeta_star最大的邻居
-            alpha = int(np.argmax(zeta_star))
-            price_vec = neighbors[alpha]  # 该轮的价格向量 (n,)
-            # 在env.f的所有列中找到与price_vec完全匹配的列索引alpha
-            found = False
-            for idx in range(env.m):
-                if np.allclose(env.f[:, idx], price_vec):
-                    alpha = idx
-                    found = True
-                    break
-            if not found:
-                raise ValueError(f"未在env.f中找到与{price_vec}匹配的价格列")
+            # 新增：将zeta_star映射为x_t
+            x_t = self.map_zeta_to_xt(neighbors, zeta_star, env.f)
+            # 选择x_t最大的index为alpha
+            alpha = int(np.argmax(x_t))
+            price_vec = env.f[:, alpha]
             j = Y[t, alpha]
             _, _, done, _ = env.step(j, alpha)
-            env.x_history.append(env.x.copy() if hasattr(env, 'x') else None)
+            env.x_history.append(x_t)
             b = env.b.copy()
             if done:
                 break
@@ -385,12 +395,14 @@ if __name__ == "__main__":
     rabbi_nplus1 = NPlusOneLP(sim_nplus1, debug=True)
     rabbi_nplus1.run()
     print("[NPlusOneLP] x_history shape:", np.array(sim_nplus1.x_history).shape)
+    print("[NPlusOneLP] x_history:", sim_nplus1.x_history)
     print("[NPlusOneLP] alpha_history:", sim_nplus1.alpha_history)
     print("[NPlusOneLP] j_history:", sim_nplus1.j_history)
     print("[NPlusOneLP] b_history:", sim_nplus1.b_history)
     print("[NPlusOneLP] reward_history:", sim_nplus1.reward_history)
     print("[NPlusOneLP] Final inventory:", sim_nplus1.b)
     print("[NPlusOneLP] total reward:", sum(sim_nplus1.reward_history))
+
 
 
 
