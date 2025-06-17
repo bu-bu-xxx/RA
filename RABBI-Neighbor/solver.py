@@ -43,8 +43,8 @@ class LPBasedPolicy:
         # 约束2: sum_{alpha} x_alpha = T-t
         A_eq = np.ones((1, m))
         b_eq = [T - t]  # T-t, 即剩余时间步数
-        # 约束3: x >= 0
-        bounds = [(0, None) for _ in range(m)]
+        # 约束3: 0 <= x <= T-t
+        bounds = [(0, T - t) for _ in range(m)]
 
         res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
         if res.success:
@@ -78,8 +78,8 @@ class RABBI(LPBasedPolicy):
             j = Y[t, alpha]
             _, _, done, _ = env.step(j, alpha)
             b = env.b.copy()
-            if done:
-                break
+            # if done:
+            #     break
 
 class OFFline(LPBasedPolicy):
     def __init__(self, env):
@@ -105,8 +105,8 @@ class OFFline(LPBasedPolicy):
             j = Y[t, alpha]
             _, _, done, _ = env.step(j, alpha)
             b = env.b.copy()
-            if done:
-                break
+            # if done:
+            #     break
 
 class NPlusOneLP(LPBasedPolicy):
     def __init__(self, env, debug=False):
@@ -121,6 +121,8 @@ class NPlusOneLP(LPBasedPolicy):
         self.gamma = env.mnl.gamma  # 顾客到达率
         self.debug = debug
         self.A = env.A  # 资源消耗矩阵 (n, d)
+        self.T = env.T  # 总时间步数
+        self.env = env  # 环境实例
     
     @staticmethod
     def mnl_demand(prices, d, mu, u0=0, gamma=1.0):
@@ -153,7 +155,7 @@ class NPlusOneLP(LPBasedPolicy):
             self._debug_print("[DEBUG][objective] demand:", demand, "shape:", np.shape(demand))
             return -np.dot(p, demand)  # 负号用于最小化
         
-        # 定义约束条件: A' * λ(p) <= b
+        # 定义约束条件: A' * λ(p) <= b / (T-t)
         def constraint(p):
             demand = self.mnl_demand(p, self.d_attract, self.mu, self.u0, self.gamma)
             self._debug_print("[DEBUG][constraint] p:", p, "shape:", np.shape(p))
@@ -161,7 +163,7 @@ class NPlusOneLP(LPBasedPolicy):
             self._debug_print("[DEBUG][constraint] self.b:", self.b, "shape:", np.shape(self.b))
             self._debug_print("[DEBUG][constraint] self.A:", self.A, "shape:", np.shape(self.A))
             self._debug_print("[DEBUG][constraint] self.A.T @ demand:", self.A.T @ demand, "shape:", np.shape(self.A.T @ demand))
-            return self.b - self.A.T @ demand  # A' * λ(p) <= b
+            return self.b/(self.T-self.env.t) - self.A.T @ demand  # A' * λ(p) <= b
         
         # 价格上下界
         bounds = [(min(prices), max(prices)) for prices in self.price_grid]
@@ -253,12 +255,12 @@ class NPlusOneLP(LPBasedPolicy):
                 row.append(resource_consumption)
             A_ub.append(row)
         
-        # 添加时间总和约束: ∑ζ_i = 1
+        # 添加时间总和约束: ∑ζ_i = T-t
         A_eq = [np.ones(num_neighbors)]
-        b_eq = [1]
+        b_eq = [self.T- self.env.t] 
         
-        # 变量边界: 0 <= ζ_i <= 1
-        bounds = [(0, 1)] * num_neighbors
+        # 变量边界: 0 <= ζ_i <= T-t
+        bounds = [(0, self.T- self.env.t)] * num_neighbors
         
         self._debug_print("[DEBUG][solve_n_plus_one_lp] neighbors:", neighbors, "shape:", np.shape(neighbors))
         self._debug_print("[DEBUG][solve_n_plus_one_lp] demands:", demands, "shape:", np.shape(demands))
@@ -338,8 +340,8 @@ class NPlusOneLP(LPBasedPolicy):
             _, _, done, _ = env.step(j, alpha)
             env.x_history.append(x_t)
             b = env.b.copy()
-            if done:
-                break
+            # if done:
+            #     break
 
 
 # 示例用法
@@ -360,6 +362,7 @@ if __name__ == "__main__":
     rabbi = RABBI(sim)
     rabbi.run()
     print("[RABBI] x_history shape:", np.array(sim.x_history).shape)
+    print("[RABBI] x_history:", sim.x_history)
     print("[RABBI] alpha_history:", sim.alpha_history)
     print("[RABBI] j_history:", sim.j_history)
     print("[RABBI] b_history:", sim.b_history)
@@ -378,6 +381,7 @@ if __name__ == "__main__":
     offline = OFFline(sim_off)
     offline.run()
     print("[OFFline] x_history shape:", np.array(sim_off.x_history).shape)
+    print("[OFFline] x_history:", sim_off.x_history)
     print("[OFFline] alpha_history:", sim_off.alpha_history)
     print("[OFFline] j_history:", sim_off.j_history)
     print("[OFFline] b_history:", sim_off.b_history)
@@ -392,7 +396,7 @@ if __name__ == "__main__":
     else:
         sim_nplus1.generate_Y_matrix()
         sim_nplus1.save_Y(Y_path)
-    rabbi_nplus1 = NPlusOneLP(sim_nplus1, debug=True)
+    rabbi_nplus1 = NPlusOneLP(sim_nplus1, debug=False)
     rabbi_nplus1.run()
     print("[NPlusOneLP] x_history shape:", np.array(sim_nplus1.x_history).shape)
     print("[NPlusOneLP] x_history:", sim_nplus1.x_history)

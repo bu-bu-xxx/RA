@@ -68,6 +68,7 @@ def run_rabbi_multi_k(param_file, y_filename):
         else:
             sim.generate_Y_matrix()
             sim.save_Y(y_file)
+        sim.compute_offline_Q()
         rabbi = RABBI(sim)
         rabbi.run()
         print(f"[RABBI][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
@@ -121,6 +122,7 @@ def run_nplusonelp_multi_k(param_file, y_filename):
         else:
             sim.generate_Y_matrix()
             sim.save_Y(y_file)
+        sim.compute_offline_Q()
         rabbi_nplus1 = NPlusOneLP(sim, debug=False)
         rabbi_nplus1.run()
         print(f"[NPlusOneLP][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
@@ -135,6 +137,27 @@ def run_nplusonelp_multi_k(param_file, y_filename):
     print(f"[NPlusOneLP] sim_list length: {len(sim_list)}")
     return sim_list
 
+def compute_lp_x_benchmark(sim) -> np.ndarray:
+    """
+    对于给定sim，依次用历史b_history和alpha_history，计算每一步的LP解x_t，
+    并输出每一步对应alpha的x_t[alpha]，返回长度为T的列表。
+    """
+    from solver import LPBasedPolicy
+    T = len(sim.alpha_history)
+    assert T == sim.T 
+    result = []
+    for t in range(T):
+        b = np.array(sim.b_history[t])
+        alpha = sim.alpha_history[t]
+        p_t = sim.Q[t, :, :]
+        # 下面参数依赖sim的结构
+        x_t = LPBasedPolicy.solve_lp(
+            b, p_t, t, sim.n, sim.m, sim.d, sim.f, sim.A, sim.T
+        )
+        result.append(x_t[alpha])
+    result = np.array(result)
+    return result
+
 if __name__ == "__main__":
     param_file = 'params.yml'
     # y_file = os.path.join("data", 'Y_matrix_debug.npy')
@@ -148,8 +171,20 @@ if __name__ == "__main__":
 
     y_filename = os.path.join("data", 'Y_matrix_debug')
     print("\n===== RABBI 多倍率示例 =====")
-    run_rabbi_multi_k(param_file, y_filename)
+    sim_rabbi = run_rabbi_multi_k(param_file, y_filename)
     print("\n===== OFFline 多倍率示例 =====")
-    run_offline_multi_k(param_file, y_filename)
+    sim_offline = run_offline_multi_k(param_file, y_filename)
     print("\n===== NPlusOneLP 多倍率示例 =====")
-    run_nplusonelp_multi_k(param_file, y_filename)
+    sim_nplusonelp = run_nplusonelp_multi_k(param_file, y_filename)
+
+    # 计算x_benchmark
+    print("\n===== 计算LP解基准 =====\n")
+    rabbi_x_benchmark = compute_lp_x_benchmark(sim_rabbi[0])  # 只取第一个sim作为基准
+    offline_x_benchmark = compute_lp_x_benchmark(sim_offline[0])
+    nplus1_x_benchmark = compute_lp_x_benchmark(sim_nplusonelp[0])
+    print("[RABBI] x_benchmark:", rabbi_x_benchmark)
+    print("[OFFline] x_benchmark:", offline_x_benchmark)
+    print("[NPlusOneLP] x_benchmark:", nplus1_x_benchmark)
+    
+
+
