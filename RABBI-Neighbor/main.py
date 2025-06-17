@@ -3,6 +3,7 @@ from solver import RABBI, OFFline, NPlusOneLP
 import numpy as np
 from customer import CustomerChoiceSimulator
 import concurrent.futures
+import shelve
 
 
 # 顶层worker函数，支持多进程pickle
@@ -200,6 +201,51 @@ def compute_lp_x_benchmark(sim) -> np.ndarray:
     result = np.array(result)
     return result
 
+def save_sim_list_to_shelve(sim_list, shelve_path):
+    """
+    将sim_list中的每个sim对象的关键参数保存到shelve文件。
+    每个sim以sim_{idx}为key，保存为dict，内容包括：
+    b_history, reward_history, alpha_history, j_history, x_history, Q, Y, T, n, m, d, A, f, B, k, p, mnl_params, linear_params
+    """
+    with shelve.open(shelve_path) as db:
+        for idx, sim in enumerate(sim_list):
+            sim_data = {
+                'b_history': getattr(sim, 'b_history', None),
+                'reward_history': getattr(sim, 'reward_history', None),
+                'alpha_history': getattr(sim, 'alpha_history', None),
+                'j_history': getattr(sim, 'j_history', None),
+                'x_history': getattr(sim, 'x_history', None),
+                'Q': getattr(sim, 'Q', None),
+                'Y': getattr(sim, 'Y', None),
+                'T': getattr(sim, 'T', None),
+                'n': getattr(sim, 'n', None),
+                'm': getattr(sim, 'm', None),
+                'd': getattr(sim, 'd', None),
+                'A': getattr(sim, 'A', None),
+                'f': getattr(sim, 'f', None),
+                'B': getattr(sim, 'B', None),
+                'k': getattr(sim, 'k', None),
+                'p': getattr(sim, 'p', None),
+                'mnl': vars(getattr(sim, 'mnl', {})) if hasattr(sim, 'mnl') else None,
+                'linear': vars(getattr(sim, 'linear', {})) if hasattr(sim, 'linear') else None,
+            }
+            db[f'sim_{idx}'] = sim_data
+    print(f"已将{len(sim_list)}个sim对象保存到shelve文件: {shelve_path}")
+
+def load_sim_list_from_shelve(shelve_path):
+    """
+    从指定shelve文件读取所有sim数据，返回sim_list（每个元素为dict，结构与save_sim_list_to_shelve一致）。
+    """
+    sim_list = []
+    with shelve.open(shelve_path) as db:
+        # 按key顺序还原
+        keys = sorted([k for k in db.keys() if k.startswith('sim_')], key=lambda x: int(x.split('_')[1]))
+        for k in keys:
+            sim_data = db[k]
+            sim_list.append(sim_data)
+    print(f"已从shelve文件{shelve_path}读取{len(sim_list)}个sim对象")
+    return sim_list
+
 if __name__ == "__main__":
     param_file = 'params.yml'
     # y_file = os.path.join("data", 'Y_matrix_debug.npy')
@@ -227,6 +273,23 @@ if __name__ == "__main__":
     print("[RABBI] x_benchmark:", rabbi_x_benchmark)
     print("[OFFline] x_benchmark:", offline_x_benchmark)
     print("[NPlusOneLP] x_benchmark:", nplus1_x_benchmark)
+
+    # 保存sim_list到shelve文件
+    shelve_path_rabbi = os.path.join("data", "sim_rabbi.shelve")
+    shelve_path_offline = os.path.join("data", "sim_offline.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "sim_nplusonelp.shelve")
+    save_sim_list_to_shelve(sim_rabbi, shelve_path_rabbi)
+    save_sim_list_to_shelve(sim_offline, shelve_path_offline)
+    save_sim_list_to_shelve(sim_nplusonelp, shelve_path_nplusonelp)
+
+    # 从shelve文件加载sim_list示例
+    print("\n===== 从shelve文件加载sim_list示例 =====")
+    loaded_sim_rabbi = load_sim_list_from_shelve(shelve_path_rabbi)
+    loaded_sim_offline = load_sim_list_from_shelve(shelve_path_offline)
+    loaded_sim_nplusonelp = load_sim_list_from_shelve(shelve_path_nplusonelp)
+    print(f"[Loaded RABBI] sim_list length: {len(loaded_sim_rabbi)}")
+    print(f"[Loaded OFFline] sim_list length: {len(loaded_sim_offline)}")
+    print(f"[Loaded NPlusOneLP] sim_list length: {len(loaded_sim_nplusonelp)}")
 
 
 

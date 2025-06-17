@@ -86,9 +86,18 @@ if __name__ == "__main__":
     print("\n===== NPlusOneLP 多倍率示例 =====")
     nplus1_sims = run_nplusonelp_multi_k(param_file, y_filename)
 
+    # 保存sim_list到shelve文件
+    from main import save_sim_list_to_shelve
+    shelve_path_rabbi = os.path.join("data", "shelve", "sim_rabbi_params2.shelve")
+    shelve_path_offline = os.path.join("data", "shelve", "sim_offline_params2.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "shelve", "sim_nplusonelp_params2.shelve")
+    save_sim_list_to_shelve(rabbi_sims, shelve_path_rabbi)
+    save_sim_list_to_shelve(offline_sims, shelve_path_offline)
+    save_sim_list_to_shelve(nplus1_sims, shelve_path_nplusonelp)
+
     print("\n===== 绘制结果 =====")
-    save_path = os.path.join("data", "multi_k_results2.png")
+    save_path = os.path.join("data", "pics", "multi_k_results2.png")
     plot_multi_k_ratio_results(rabbi_sims, offline_sims, nplus1_sims, save_path, show_plot=True)
     print("\n===== 绘制LP解基准比例 =====")
-    save_path = os.path.join("data", "lp_x_benchmark_ratio_vs_k2.png")
+    save_path = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
     plot_lp_x_benchmark_ratio_vs_k(rabbi_sims, nplus1_sims, save_path, show_plot=True)

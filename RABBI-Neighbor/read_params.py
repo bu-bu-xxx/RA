@@ -2,6 +2,18 @@ import yaml
 import numpy as np
 import itertools
 
+class MNLParams:
+    def __init__(self):
+        self.d = None
+        self.mu = None
+        self.u0 = 0
+        self.gamma = 1.0
+
+class LinearParams:
+    def __init__(self):
+        self.psi = None
+        self.theta = None
+
 class ParamsLoader:
     def __init__(self, yaml_path):
         with open(yaml_path, 'r', encoding='utf-8') as f:
@@ -25,8 +37,8 @@ class ParamsLoader:
         
         self.demand_model = params.get('demand_model', 'MNL')  # 默认使用MNL模型
         self.tolerance = float(params.get('tolerance', 1e-4))
-        self.mnl = type('MNLParams', (), {})()
-        self.linear = type('LinearParams', (), {})()
+        self.mnl = MNLParams()
+        self.linear = LinearParams()
         if 'MNL' in params:
             self.mnl.d = np.array(params['MNL'].get('d'), dtype=float)
             self.mnl.mu = float(params['MNL'].get('mu'))
