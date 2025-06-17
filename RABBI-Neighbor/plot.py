@@ -76,8 +76,8 @@ def plot_lp_x_benchmark_ratio_vs_k(rabbi_sims, nplus1_sims, save_path=None, show
     plt.show()
 
 if __name__ == "__main__":
-    param_file = 'params.yml'
-    y_filename = os.path.join("data", 'Y_matrix_debug')
+    param_file = 'params1.yml'
+    y_filename = os.path.join("data", 'Y_matrix_params1')
 
     print("\n===== RABBI 多倍率示例 =====")
     rabbi_sims = run_rabbi_multi_k(param_file, y_filename)

@@ -207,25 +207,25 @@ class NPlusOneLP(LPBasedPolicy):
             upper_bounds.append(upper)
         
         # 构造邻居向量 (N+1个)
-        # 前N个: 每个位置依次使用上界，其余使用下界
-        for i in range(self.n):
-            neighbor = [lower_bounds[j] if j != i else upper_bounds[j] for j in range(self.n)]
-            neighbors.append(neighbor)
-        
-        # 第N+1个: 所有产品都使用下界
+        # 第一个: 所有产品都使用下界
         neighbors.append(lower_bounds)
+        # 后N个: 前i个位置用上界，其余用下界
+        for i in range(1, self.n+1):
+            neighbor = [upper_bounds[j] if j < i else lower_bounds[j] for j in range(self.n)]
+            neighbors.append(neighbor)
         
         self._debug_print("[DEBUG][find_neighbors] p_star:", p_star, "shape:", np.shape(p_star))
         self._debug_print("[DEBUG][find_neighbors] lower_bounds:", lower_bounds, "shape:", np.shape(lower_bounds))
         self._debug_print("[DEBUG][find_neighbors] upper_bounds:", upper_bounds, "shape:", np.shape(upper_bounds))
         self._debug_print("[DEBUG][find_neighbors] neighbors:", neighbors, "shape:", np.shape(neighbors))
+        # print("[DEBUG][find_neighbors] neighbors:", neighbors)
         return neighbors
     
     def solve_n_plus_one_lp(self, neighbors):
         """
         步骤3: 求解(N+1) LP问题
-        :param neighbors: 邻居价格向量列表
-        :return: 最优时间分配比例 zeta_star
+        :param neighbors: 邻居价格向量列表 (N+1, n)
+        :return: 最优时间分配比例 zeta_star (N+1,)
         """
         num_neighbors = len(neighbors)
         
@@ -275,6 +275,14 @@ class NPlusOneLP(LPBasedPolicy):
         self._debug_print("[DEBUG][solve_n_plus_one_lp] res.x:", res.x if res.success else None, "shape:", np.shape(res.x) if res.success else None)
         self._debug_print("[DEBUG][solve_n_plus_one_lp] res.success:", res.success, "message:", res.message)
         if not res.success:
+            print("[DEBUG][solve_n_plus_one_lp] neighbors:", neighbors)
+            print("[DEBUG][solve_n_plus_one_lp] demands:", demands)
+            print("[DEBUG][solve_n_plus_one_lp] revenues:", revenues)
+            print("[DEBUG][solve_n_plus_one_lp] c:", c)
+            print("[DEBUG][solve_n_plus_one_lp] A_ub:", A_ub)
+            print("[DEBUG][solve_n_plus_one_lp] b_ub:", self.b)
+            print("[DEBUG][solve_n_plus_one_lp] A_eq:", A_eq, "b_eq:", b_eq)
+            print("[DEBUG][solve_n_plus_one_lp] bounds:", bounds)
             raise ValueError(f"(N+1) LP求解失败: {res.message}")
             
         return res.x
