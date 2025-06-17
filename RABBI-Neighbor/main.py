@@ -2,7 +2,91 @@ import os
 from solver import RABBI, OFFline, NPlusOneLP
 import numpy as np
 from customer import CustomerChoiceSimulator
+import concurrent.futures
 
+
+# 顶层worker函数，支持多进程pickle
+
+def rabbi_worker(args):
+    i, k_val, param_file, y_filename = args
+    from solver import RABBI
+    from customer import CustomerChoiceSimulator
+    import numpy as np
+    import os
+    sim = CustomerChoiceSimulator(param_file, random_seed=42)
+    sim.B = sim.B * k_val
+    sim.T = int(sim.T * k_val)
+    y_file = f"{y_filename}_k{int(k_val)}.npy"
+    if os.path.exists(y_file):
+        sim.load_Y(y_file)
+    else:
+        sim.generate_Y_matrix()
+        sim.save_Y(y_file)
+    sim.compute_offline_Q()
+    rabbi = RABBI(sim)
+    rabbi.run()
+    print(f"[RABBI][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
+    print(f"[RABBI][k={k_val}] alpha_history:", sim.alpha_history)
+    print(f"[RABBI][k={k_val}] j_history:", sim.j_history)
+    print(f"[RABBI][k={k_val}] b_history:", sim.b_history)
+    print(f"[RABBI][k={k_val}] reward_history:", sim.reward_history)
+    print(f"[RABBI][k={k_val}] Final inventory:", sim.b)
+    print(f"[RABBI][k={k_val}] total reward:", sum(sim.reward_history))
+    return (i, sim)
+
+def offline_worker(args):
+    i, k_val, param_file, y_filename = args
+    from solver import OFFline
+    from customer import CustomerChoiceSimulator
+    import numpy as np
+    import os
+    sim = CustomerChoiceSimulator(param_file, random_seed=42)
+    sim.B = sim.B * k_val
+    sim.T = int(sim.T * k_val)
+    y_file = f"{y_filename}_k{int(k_val)}.npy"
+    if os.path.exists(y_file):
+        sim.load_Y(y_file)
+    else:
+        sim.generate_Y_matrix()
+        sim.save_Y(y_file)
+    sim.compute_offline_Q()
+    offline = OFFline(sim)
+    offline.run()
+    print(f"[OFFline][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
+    print(f"[OFFline][k={k_val}] alpha_history:", sim.alpha_history)
+    print(f"[OFFline][k={k_val}] j_history:", sim.j_history)
+    print(f"[OFFline][k={k_val}] b_history:", sim.b_history)
+    print(f"[OFFline][k={k_val}] reward_history:", sim.reward_history)
+    print(f"[OFFline][k={k_val}] Final inventory:", sim.b)
+    print(f"[OFFline][k={k_val}] total reward:", sum(sim.reward_history))
+    return (i, sim)
+
+def nplusonelp_worker(args):
+    i, k_val, param_file, y_filename = args
+    from solver import NPlusOneLP
+    from customer import CustomerChoiceSimulator
+    import numpy as np
+    import os
+    sim = CustomerChoiceSimulator(param_file, random_seed=42)
+    sim.B = sim.B * k_val
+    sim.T = int(sim.T * k_val)
+    y_file = f"{y_filename}_k{int(k_val)}.npy"
+    if os.path.exists(y_file):
+        sim.load_Y(y_file)
+    else:
+        sim.generate_Y_matrix()
+        sim.save_Y(y_file)
+    sim.compute_offline_Q()
+    rabbi_nplus1 = NPlusOneLP(sim, debug=False)
+    rabbi_nplus1.run()
+    print(f"[NPlusOneLP][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
+    print(f"[NPlusOneLP][k={k_val}] alpha_history:", sim.alpha_history)
+    print(f"[NPlusOneLP][k={k_val}] j_history:", sim.j_history)
+    print(f"[NPlusOneLP][k={k_val}] b_history:", sim.b_history)
+    print(f"[NPlusOneLP][k={k_val}] reward_history:", sim.reward_history)
+    print(f"[NPlusOneLP][k={k_val}] Final inventory:", sim.b)
+    print(f"[NPlusOneLP][k={k_val}] total reward:", sum(sim.reward_history))
+    return (i, sim)
 
 def run_rabbi(param_file, y_file):
     sim = CustomerChoiceSimulator(param_file, random_seed=42)
@@ -56,84 +140,42 @@ def run_nplusonelp(param_file, y_file):
     print("[NPlusOneLP] Final inventory:", sim.b)
     print("[NPlusOneLP] total reward:", sum(sim.reward_history))
 
-def run_rabbi_multi_k(param_file, y_filename):
-    sim_list = []
+def run_rabbi_multi_k(param_file, y_filename, max_concurrency=None):
+    if max_concurrency is None:
+        max_concurrency = os.cpu_count()
     sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    for i, k_val in enumerate(sim.k):
-        sim.B = sim.B * k_val
-        sim.T = int(sim.T * k_val)
-        y_file = f"{y_filename}_k{int(k_val)}.npy"
-        if os.path.exists(y_file):
-            sim.load_Y(y_file)
-        else:
-            sim.generate_Y_matrix()
-            sim.save_Y(y_file)
-        sim.compute_offline_Q()
-        rabbi = RABBI(sim)
-        rabbi.run()
-        print(f"[RABBI][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
-        print(f"[RABBI][k={k_val}] alpha_history:", sim.alpha_history)
-        print(f"[RABBI][k={k_val}] j_history:", sim.j_history)
-        print(f"[RABBI][k={k_val}] b_history:", sim.b_history)
-        print(f"[RABBI][k={k_val}] reward_history:", sim.reward_history)
-        print(f"[RABBI][k={k_val}] Final inventory:", sim.b)
-        print(f"[RABBI][k={k_val}] total reward:", sum(sim.reward_history))
-        sim_list.append(sim)
-        sim = CustomerChoiceSimulator(param_file, random_seed=42)
+    k = sim.k  # 获取倍率列表, 所有sim实例都使用同一倍率列表
+    args_list = [(i, k_val, param_file, y_filename) for i, k_val in enumerate(k)]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
+        results = list(executor.map(rabbi_worker, args_list))
+    results.sort(key=lambda x: x[0])
+    sim_list = [sim for i, sim in results]
     print(f"[RABBI] sim_list length: {len(sim_list)}")
     return sim_list
 
-def run_offline_multi_k(param_file, y_filename):
-    sim_list = []
+def run_offline_multi_k(param_file, y_filename, max_concurrency=None):
+    if max_concurrency is None:
+        max_concurrency = os.cpu_count()
     sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    for i, k_val in enumerate(sim.k):
-        sim.B = sim.B * k_val
-        sim.T = int(sim.T * k_val)
-        y_file = f"{y_filename}_k{int(k_val)}.npy"
-        if os.path.exists(y_file):
-            sim.load_Y(y_file)
-        else:
-            sim.generate_Y_matrix()
-            sim.save_Y(y_file)
-        sim.compute_offline_Q()
-        offline = OFFline(sim)
-        offline.run()
-        print(f"[OFFline][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
-        print(f"[OFFline][k={k_val}] alpha_history:", sim.alpha_history)
-        print(f"[OFFline][k={k_val}] j_history:", sim.j_history)
-        print(f"[OFFline][k={k_val}] b_history:", sim.b_history)
-        print(f"[OFFline][k={k_val}] reward_history:", sim.reward_history)
-        print(f"[OFFline][k={k_val}] Final inventory:", sim.b)
-        print(f"[OFFline][k={k_val}] total reward:", sum(sim.reward_history))
-        sim_list.append(sim)
-        sim = CustomerChoiceSimulator(param_file, random_seed=42)
+    k = sim.k
+    args_list = [(i, k_val, param_file, y_filename) for i, k_val in enumerate(k)]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
+        results = list(executor.map(offline_worker, args_list))
+    results.sort(key=lambda x: x[0])
+    sim_list = [sim for i, sim in results]
     print(f"[OFFline] sim_list length: {len(sim_list)}")
     return sim_list
 
-def run_nplusonelp_multi_k(param_file, y_filename):
-    sim_list = []
+def run_nplusonelp_multi_k(param_file, y_filename, max_concurrency=None):
+    if max_concurrency is None:
+        max_concurrency = os.cpu_count()
     sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    for i, k_val in enumerate(sim.k):
-        sim.B = sim.B * k_val
-        sim.T = int(sim.T * k_val)
-        y_file = f"{y_filename}_k{int(k_val)}.npy"
-        if os.path.exists(y_file):
-            sim.load_Y(y_file)
-        else:
-            sim.generate_Y_matrix()
-            sim.save_Y(y_file)
-        sim.compute_offline_Q()
-        rabbi_nplus1 = NPlusOneLP(sim, debug=False)
-        rabbi_nplus1.run()
-        print(f"[NPlusOneLP][k={k_val}] x_history shape:", np.array(sim.x_history).shape)
-        print(f"[NPlusOneLP][k={k_val}] alpha_history:", sim.alpha_history)
-        print(f"[NPlusOneLP][k={k_val}] j_history:", sim.j_history)
-        print(f"[NPlusOneLP][k={k_val}] b_history:", sim.b_history)
-        print(f"[NPlusOneLP][k={k_val}] reward_history:", sim.reward_history)
-        print(f"[NPlusOneLP][k={k_val}] Final inventory:", sim.b)
-        print(f"[NPlusOneLP][k={k_val}] total reward:", sum(sim.reward_history))
-        sim_list.append(sim)
-        sim = CustomerChoiceSimulator(param_file, random_seed=42)
+    k = sim.k
+    args_list = [(i, k_val, param_file, y_filename) for i, k_val in enumerate(k)]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
+        results = list(executor.map(nplusonelp_worker, args_list))
+    results.sort(key=lambda x: x[0])
+    sim_list = [sim for i, sim in results]
     print(f"[NPlusOneLP] sim_list length: {len(sim_list)}")
     return sim_list
 
@@ -185,6 +227,6 @@ if __name__ == "__main__":
     print("[RABBI] x_benchmark:", rabbi_x_benchmark)
     print("[OFFline] x_benchmark:", offline_x_benchmark)
     print("[NPlusOneLP] x_benchmark:", nplus1_x_benchmark)
-    
+
 
 
