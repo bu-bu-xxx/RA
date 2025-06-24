@@ -9,25 +9,23 @@ class DynamicPricingEnv(ParamsLoader):
         self.reset()
         if random_seed is not None:
             np.random.seed(random_seed)
-        # 适配MNL和Linear参数
-        self.mnl = getattr(self, 'mnl', None)
-        self.linear = getattr(self, 'linear', None)
+        # 适配MNL和Linear参数 - 现在通过params访问
 
     def reset(self):
         """重置环境到初始状态"""
-        self.b = self.B.copy()
-        self.t = 0 # 当前time step: start from 0
-        self.reward_history = []
-        self.b_history = [self.b.copy()]
-        self.j_history = []
-        self.alpha_history = []
+        self.params.b = self.params.B.copy()
+        self.params.t = 0 # 当前time step: start from 0
+        self.params.reward_history = []
+        self.params.b_history = [self.params.b.copy()]
+        self.params.j_history = []
+        self.params.alpha_history = []
         return self._get_obs()
 
     def _get_obs(self):
         """返回当前观测（可自定义）"""
         return {
-            'b': self.b.copy(),
-            't': self.t
+            'b': self.params.b.copy(),
+            't': self.params.t
         }
 
     def step(self, j: int, alpha: int):
@@ -36,25 +34,25 @@ class DynamicPricingEnv(ParamsLoader):
         j: int, 0~(n-1)，表示顾客t时间购买的产品编号，-1表示未购买
         alpha: int, 0~(m-1)，表示顾客t时间选择的价格集编号
         history:
-        - self.reward_history: 奖励历史
-        - self.b_history: 库存历史
-        - self.j_history: 产品选择历史
-        - self.alpha_history: 价格集选择历史
+        - self.params.reward_history: 奖励历史
+        - self.params.b_history: 库存历史
+        - self.params.j_history: 产品选择历史
+        - self.params.alpha_history: 价格集选择历史
         返回: obs, reward, done, info
         """
         reward = 0
-        self.t += 1
-        done = (self.t >= self.T)
+        self.params.t += 1
+        done = (self.params.t >= self.params.T)
         info = {}
 
         # 支持-1表示未购买
         if j == -1:
             info['sold'] = False
-            self.reward_history.append(reward)
-            self.b_history.append(self.b.copy())
-            self.j_history.append(j)
-            self.alpha_history.append(alpha)
-            done = done or np.any(self.b < 0)
+            self.params.reward_history.append(reward)
+            self.params.b_history.append(self.params.b.copy())
+            self.params.j_history.append(j)
+            self.params.alpha_history.append(alpha)
+            done = done or np.any(self.params.b < 0)
             return self._get_obs(), reward, done, info
 
         # 检查动作是否有效
@@ -62,22 +60,22 @@ class DynamicPricingEnv(ParamsLoader):
             print("j: ", j, "type: ", type(j))
             raise ValueError("j must be an integer representing the product index or -1.")
         # 检查动作范围
-        if j < 0 or j >= self.n:
-            raise ValueError(f"j must be in range [0, {self.n - 1}] or -1 (not buy), but got {j}.")
+        if j < 0 or j >= self.params.n:
+            raise ValueError(f"j must be in range [0, {self.params.n - 1}] or -1 (not buy), but got {j}.")
         
         # 检查库存是否足够
-        if np.all(self.b - self.A[j] >= 0):
-            self.b -= self.A[j]
-            reward = self.f[j, alpha] 
+        if np.all(self.params.b - self.params.A[j] >= 0):
+            self.params.b -= self.params.A[j]
+            reward = self.params.f[j, alpha] 
             info['sold'] = True
         else:
             info['sold'] = False
 
-        self.reward_history.append(reward)
-        self.b_history.append(self.b.copy())
-        self.j_history.append(j)
-        self.alpha_history.append(alpha)
-        done = done or np.any(self.b < 0)
+        self.params.reward_history.append(reward)
+        self.params.b_history.append(self.params.b.copy())
+        self.params.j_history.append(j)
+        self.params.alpha_history.append(alpha)
+        done = done or np.any(self.params.b < 0)
         return self._get_obs(), reward, done, info
 
     # 可扩展更多方法，如 render, sample_customer, 等

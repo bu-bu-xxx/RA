@@ -10,6 +10,7 @@ class LPBasedPolicy:
         - x_history: 存储每一步的x向量 (T, m)
         """
         self.env = env
+        self.params = self.env.params  # 添加params引用
         self.reset()
 
     def reset(self):
@@ -17,7 +18,7 @@ class LPBasedPolicy:
         重置环境和历史记录
         """
         self.env.reset()
-        self.env.x_history = [] # (T, m)
+        self.params.x_history = [] # (T, m)
 
     @staticmethod
     def solve_lp(b, p, t, n, m, d, f, A_mat, T):
@@ -62,22 +63,22 @@ class RABBI(LPBasedPolicy):
         """
         env = self.env
         env.reset()
-        Y = env.Y if hasattr(env, 'Y') and env.Y is not None else env.generate_Y_matrix() # (T, m)
-        b = env.B.copy() # (d,)
-        for t in range(env.T):
-            p_t = env.p  # 每一步都用env.p (n, m)
+        Y = env.params.Y if env.params.Y is not None else env.generate_Y_matrix() # (T, m)
+        b = env.params.B.copy() # (d,)
+        for t in range(env.params.T):
+            p_t = env.params.p  # 每一步都用env.params.p (n, m)
             try:
-                x_t = self.solve_lp(b, p_t, t, env.n, env.m, env.d, env.f, env.A, env.T)  # (m,)
+                x_t = self.solve_lp(b, p_t, t, env.params.n, env.params.m, env.params.d, env.params.f, env.params.A, env.params.T)  # (m,)
             except Exception as e:
                 print(f"Error solving LP at time {t}: {e}")
                 import traceback
                 traceback.print_exc()
                 break
-            env.x_history.append(x_t)
+            self.params.x_history.append(x_t)
             alpha = int(np.argmax(x_t)) 
             j = Y[t, alpha]
             _, _, done, _ = env.step(j, alpha)
-            b = env.b.copy()
+            b = env.params.b.copy()
             # if done:
             #     break
 
@@ -91,37 +92,37 @@ class OFFline(LPBasedPolicy):
         """
         env = self.env
         env.reset()
-        Y = env.Y if hasattr(env, 'Y') and env.Y is not None else env.generate_Y_matrix() # (T, m)
-        b = env.B.copy() # (d,)
-        for t in range(env.T): 
-            p_t = env.Q[t, :, :]  # 使用Q[t]矩阵 (n, m)
+        Y = env.params.Y if env.params.Y is not None else env.generate_Y_matrix() # (T, m)
+        b = env.params.B.copy() # (d,)
+        for t in range(env.params.T): 
+            p_t = env.params.Q[t, :, :]  # 使用Q[t]矩阵 (n, m)
             try:
-                x_t = self.solve_lp(b, p_t, t, env.n, env.m, env.d, env.f, env.A, env.T)  # (m,)
+                x_t = self.solve_lp(b, p_t, t, env.params.n, env.params.m, env.params.d, env.params.f, env.params.A, env.params.T)  # (m,)
             except Exception as e:
                 print(f"Error solving LP at time {t}: {e}")
                 raise e
-            env.x_history.append(x_t)
+            self.params.x_history.append(x_t)
             alpha = int(np.argmax(x_t)) 
             j = Y[t, alpha]
             _, _, done, _ = env.step(j, alpha)
-            b = env.b.copy()
+            b = env.params.b.copy()
             # if done:
             #     break
 
 class NPlusOneLP(LPBasedPolicy):
     def __init__(self, env, debug=False):
         super().__init__(env)
-        self.n = env.n  # 产品数量
-        self.d = env.d  # 资源种类数量
-        self.b = env.b  # 当前库存 (d维向量)
-        self.price_grid = env.f_split  # 离散价格集合 (列表的列表)
-        self.d_attract = env.mnl.d  # 产品吸引力参数
-        self.mu = env.mnl.mu  # MNL尺度参数
-        self.u0 = env.mnl.u0  # 不购买选项的效用
-        self.gamma = env.mnl.gamma  # 顾客到达率
+        self.n = env.params.n  # 产品数量
+        self.d = env.params.d  # 资源种类数量
+        self.b = env.params.b  # 当前库存 (d维向量)
+        self.price_grid = env.params.f_split  # 离散价格集合 (列表的列表)
+        self.d_attract = env.params.mnl.d  # 产品吸引力参数
+        self.mu = env.params.mnl.mu  # MNL尺度参数
+        self.u0 = env.params.mnl.u0  # 不购买选项的效用
+        self.gamma = env.params.mnl.gamma  # 顾客到达率
         self.debug = debug
-        self.A = env.A  # 资源消耗矩阵 (n, d)
-        self.T = env.T  # 总时间步数
+        self.A = env.params.A  # 资源消耗矩阵 (n, d)
+        self.T = env.params.T  # 总时间步数
         self.env = env  # 环境实例
     
     @staticmethod
@@ -160,10 +161,10 @@ class NPlusOneLP(LPBasedPolicy):
             demand = self.mnl_demand(p, self.d_attract, self.mu, self.u0, self.gamma)
             self._debug_print("[DEBUG][constraint] p:", p, "shape:", np.shape(p))
             self._debug_print("[DEBUG][constraint] demand:", demand, "shape:", np.shape(demand))
-            self._debug_print("[DEBUG][constraint] self.b:", self.b, "shape:", np.shape(self.b))
+            self._debug_print("[DEBUG][constraint] self.params.b:", self.params.b, "shape:", np.shape(self.params.b))
             self._debug_print("[DEBUG][constraint] self.A:", self.A, "shape:", np.shape(self.A))
             self._debug_print("[DEBUG][constraint] self.A.T @ demand:", self.A.T @ demand, "shape:", np.shape(self.A.T @ demand))
-            return self.b/(self.T-self.env.t) - self.A.T @ demand  # A' * λ(p) <= b
+            return self.params.b/(self.T-self.params.t) - self.A.T @ demand  # A' * λ(p) <= b
         
         # 价格上下界
         bounds = [(min(prices), max(prices)) for prices in self.price_grid]
@@ -254,13 +255,12 @@ class NPlusOneLP(LPBasedPolicy):
                 resource_consumption = np.dot(self.A[:, k], demands[i])
                 row.append(resource_consumption)
             A_ub.append(row)
-        
-        # 添加时间总和约束: ∑ζ_i = T-t
+          # 添加时间总和约束: ∑ζ_i = T-t
         A_eq = [np.ones(num_neighbors)]
-        b_eq = [self.T- self.env.t] 
+        b_eq = [self.T- self.params.t] 
         
         # 变量边界: 0 <= ζ_i <= T-t
-        bounds = [(0, self.T- self.env.t)] * num_neighbors
+        bounds = [(0, self.T- self.params.t)] * num_neighbors
         
         self._debug_print("[DEBUG][solve_n_plus_one_lp] neighbors:", neighbors, "shape:", np.shape(neighbors))
         self._debug_print("[DEBUG][solve_n_plus_one_lp] demands:", demands, "shape:", np.shape(demands))
@@ -268,9 +268,8 @@ class NPlusOneLP(LPBasedPolicy):
         self._debug_print("[DEBUG][solve_n_plus_one_lp] c:", c, "shape:", np.shape(c))
         self._debug_print("[DEBUG][solve_n_plus_one_lp] A_ub:", A_ub, "shape:", np.shape(A_ub))
         self._debug_print("[DEBUG][solve_n_plus_one_lp] b_ub:", self.b, "shape:", np.shape(self.b))
-        self._debug_print("[DEBUG][solve_n_plus_one_lp] A_eq:", A_eq, "b_eq:", b_eq)
-        # 求解线性规划
-        res = linprog(c, A_ub=A_ub, b_ub=self.b, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+        self._debug_print("[DEBUG][solve_n_plus_one_lp] A_eq:", A_eq, "b_eq:", b_eq)        # 求解线性规划
+        res = linprog(c, A_ub=A_ub, b_ub=self.params.b, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
         
         self._debug_print("[DEBUG][solve_n_plus_one_lp] res.x:", res.x if res.success else None, "shape:", np.shape(res.x) if res.success else None)
         self._debug_print("[DEBUG][solve_n_plus_one_lp] res.success:", res.success, "message:", res.message)
@@ -280,7 +279,7 @@ class NPlusOneLP(LPBasedPolicy):
             print("[DEBUG][solve_n_plus_one_lp] revenues:", revenues)
             print("[DEBUG][solve_n_plus_one_lp] c:", c)
             print("[DEBUG][solve_n_plus_one_lp] A_ub:", A_ub)
-            print("[DEBUG][solve_n_plus_one_lp] b_ub:", self.b)
+            print("[DEBUG][solve_n_plus_one_lp] b_ub:", self.params.b)
             print("[DEBUG][solve_n_plus_one_lp] A_eq:", A_eq, "b_eq:", b_eq)
             print("[DEBUG][solve_n_plus_one_lp] bounds:", bounds)
             raise ValueError(f"(N+1) LP求解失败: {res.message}")
@@ -331,23 +330,23 @@ class NPlusOneLP(LPBasedPolicy):
         """
         env = self.env
         env.reset()
-        Y = env.Y if hasattr(env, 'Y') and env.Y is not None else env.generate_Y_matrix()  # (T, m)
-        b = env.B.copy()  # (d,)
-        for t in range(env.T):
+        Y = env.params.Y if env.params.Y is not None else env.generate_Y_matrix()  # (T, m)
+        b = env.params.B.copy()  # (d,)
+        for t in range(env.params.T):
             try:
                 neighbors, zeta_star = self.get_pricing_policy()
             except Exception as e:
                 print(f"Error in get_pricing_policy at time {t}: {e}")
                 raise e
             # 新增：将zeta_star映射为x_t
-            x_t = self.map_zeta_to_xt(neighbors, zeta_star, env.f)
+            x_t = self.map_zeta_to_xt(neighbors, zeta_star, env.params.f)
             # 选择x_t最大的index为alpha
             alpha = int(np.argmax(x_t))
-            price_vec = env.f[:, alpha]
+            price_vec = env.params.f[:, alpha]
             j = Y[t, alpha]
             _, _, done, _ = env.step(j, alpha)
-            env.x_history.append(x_t)
-            b = env.b.copy()
+            self.params.x_history.append(x_t)
+            b = env.params.b.copy()
             # if done:
             #     break
 
@@ -369,14 +368,14 @@ if __name__ == "__main__":
         sim.save_Y(Y_path)
     rabbi = RABBI(sim)
     rabbi.run()
-    print("[RABBI] x_history shape:", np.array(sim.x_history).shape)
-    print("[RABBI] x_history:", sim.x_history)
-    print("[RABBI] alpha_history:", sim.alpha_history)
-    print("[RABBI] j_history:", sim.j_history)
-    print("[RABBI] b_history:", sim.b_history)
-    print("[RABBI] reward_history:", sim.reward_history)
-    print("[RABBI] Final inventory:", sim.b)
-    print("[RABBI] total reward:", sum(sim.reward_history))
+    print("[RABBI] x_history shape:", np.array(sim.params.x_history).shape)
+    print("[RABBI] x_history:", sim.params.x_history)
+    print("[RABBI] alpha_history:", sim.params.alpha_history)
+    print("[RABBI] j_history:", sim.params.j_history)
+    print("[RABBI] b_history:", sim.params.b_history)
+    print("[RABBI] reward_history:", sim.params.reward_history)
+    print("[RABBI] Final inventory:", sim.params.b)
+    print("[RABBI] total reward:", sum(sim.params.reward_history))
 
     # OFFline策略示例
     sim_off = CustomerChoiceSimulator('params.yml', random_seed=42)
@@ -388,14 +387,14 @@ if __name__ == "__main__":
     sim_off.compute_offline_Q()  # 计算Q矩阵
     offline = OFFline(sim_off)
     offline.run()
-    print("[OFFline] x_history shape:", np.array(sim_off.x_history).shape)
-    print("[OFFline] x_history:", sim_off.x_history)
-    print("[OFFline] alpha_history:", sim_off.alpha_history)
-    print("[OFFline] j_history:", sim_off.j_history)
-    print("[OFFline] b_history:", sim_off.b_history)
-    print("[OFFline] reward_history:", sim_off.reward_history)
-    print("[OFFline] Final inventory:", sim_off.b)
-    print("[OFFline] total reward:", sum(sim_off.reward_history))
+    print("[OFFline] x_history shape:", np.array(sim_off.params.x_history).shape)
+    print("[OFFline] x_history:", sim_off.params.x_history)
+    print("[OFFline] alpha_history:", sim_off.params.alpha_history)
+    print("[OFFline] j_history:", sim_off.params.j_history)
+    print("[OFFline] b_history:", sim_off.params.b_history)
+    print("[OFFline] reward_history:", sim_off.params.reward_history)
+    print("[OFFline] Final inventory:", sim_off.params.b)
+    print("[OFFline] total reward:", sum(sim_off.params.reward_history))
 
     # NPlusOneLP策略示例
     sim_nplus1 = CustomerChoiceSimulator('params.yml', random_seed=42)
@@ -406,14 +405,14 @@ if __name__ == "__main__":
         sim_nplus1.save_Y(Y_path)
     rabbi_nplus1 = NPlusOneLP(sim_nplus1, debug=False)
     rabbi_nplus1.run()
-    print("[NPlusOneLP] x_history shape:", np.array(sim_nplus1.x_history).shape)
-    print("[NPlusOneLP] x_history:", sim_nplus1.x_history)
-    print("[NPlusOneLP] alpha_history:", sim_nplus1.alpha_history)
-    print("[NPlusOneLP] j_history:", sim_nplus1.j_history)
-    print("[NPlusOneLP] b_history:", sim_nplus1.b_history)
-    print("[NPlusOneLP] reward_history:", sim_nplus1.reward_history)
-    print("[NPlusOneLP] Final inventory:", sim_nplus1.b)
-    print("[NPlusOneLP] total reward:", sum(sim_nplus1.reward_history))
+    print("[NPlusOneLP] x_history shape:", np.array(sim_nplus1.params.x_history).shape)
+    print("[NPlusOneLP] x_history:", sim_nplus1.params.x_history)
+    print("[NPlusOneLP] alpha_history:", sim_nplus1.params.alpha_history)
+    print("[NPlusOneLP] j_history:", sim_nplus1.params.j_history)
+    print("[NPlusOneLP] b_history:", sim_nplus1.params.b_history)
+    print("[NPlusOneLP] reward_history:", sim_nplus1.params.reward_history)
+    print("[NPlusOneLP] Final inventory:", sim_nplus1.params.b)
+    print("[NPlusOneLP] total reward:", sum(sim_nplus1.params.reward_history))
 
 
 

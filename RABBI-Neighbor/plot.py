@@ -3,13 +3,13 @@ import matplotlib.pyplot as plt
 from main import run_rabbi_multi_k, run_offline_multi_k, run_nplusonelp_multi_k
 import numpy as np
 
-def plot_multi_k_results(rabbi_sims, offline_sims, nplus1_sims):
+def plot_multi_k_results(rabbi_params, offline_params, nplus1_params):
     # 提取k和reward
-    rabbi_rewards = [sum(sim.reward_history) for sim in rabbi_sims]
-    offline_rewards = [sum(sim.reward_history) for sim in offline_sims]
-    nplus1_rewards = [sum(sim.reward_history) for sim in nplus1_sims]
-    # 直接用sim.k
-    k_list = rabbi_sims[0].k if hasattr(rabbi_sims[0], 'k') else list(range(len(rabbi_sims)))
+    rabbi_rewards = [sum(params.reward_history) for params in rabbi_params]
+    offline_rewards = [sum(params.reward_history) for params in offline_params]
+    nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
+    # 直接用params.k
+    k_list = rabbi_params[0].k if hasattr(rabbi_params[0], 'k') else list(range(len(rabbi_params)))
 
     plt.figure(figsize=(8,6))
     plt.plot(k_list, rabbi_rewards, marker='o', label='RABBI')
@@ -23,11 +23,11 @@ def plot_multi_k_results(rabbi_sims, offline_sims, nplus1_sims):
     plt.tight_layout()
     plt.show()
 
-def plot_multi_k_ratio_results(rabbi_sims, offline_sims, nplus1_sims, save_path=None, show_plot=False):
-    rabbi_rewards = [sum(sim.reward_history) for sim in rabbi_sims]
-    offline_rewards = [sum(sim.reward_history) for sim in offline_sims]
-    nplus1_rewards = [sum(sim.reward_history) for sim in nplus1_sims]
-    k_list = rabbi_sims[0].k if hasattr(rabbi_sims[0], 'k') else list(range(len(rabbi_sims)))
+def plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, save_path=None, show_plot=False):
+    rabbi_rewards = [sum(params.reward_history) for params in rabbi_params]
+    offline_rewards = [sum(params.reward_history) for params in offline_params]
+    nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
+    k_list = rabbi_params[0].k if hasattr(rabbi_params[0], 'k') else list(range(len(rabbi_params)))
     rabbi_ratio = [r/o if o != 0 else 0 for r, o in zip(rabbi_rewards, offline_rewards)]
     nplus1_ratio = [n/o if o != 0 else 0 for n, o in zip(nplus1_rewards, offline_rewards)]
 
@@ -42,24 +42,28 @@ def plot_multi_k_ratio_results(rabbi_sims, offline_sims, nplus1_sims, save_path=
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path)
-    plt.show()
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
 
-def plot_lp_x_benchmark_ratio_vs_k(rabbi_sims, nplus1_sims, save_path=None, show_plot=False):
+
+def plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, save_path=None, show_plot=False):
     """
-    输入rabbi_sims和nplus1_sims，分别计算每个sim的compute_lp_x_benchmark(sim)，
+    输入rabbi_params和nplus1_params，分别计算每个params的compute_lp_x_benchmark(params)，
     统计每个输出结果中>=1的数所占比例，
-    并画plot，x轴为sim.k，y轴为比例，两组曲线同图展示。
+    并画plot，x轴为params.k，y轴为比例，两组曲线同图展示。
     """
     from main import compute_lp_x_benchmark
-    k_list = rabbi_sims[0].k
+    k_list = rabbi_params[0].k
     rabbi_ratios = []
     nplus1_ratios = []
-    for sim in rabbi_sims:
-        x_bench = compute_lp_x_benchmark(sim)
+    for params in rabbi_params:
+        x_bench = compute_lp_x_benchmark(params)
         ratio = np.mean(np.array(x_bench) >= 1)
         rabbi_ratios.append(ratio)
-    for sim in nplus1_sims:
-        x_bench = compute_lp_x_benchmark(sim)
+    for params in nplus1_params:
+        x_bench = compute_lp_x_benchmark(params)
         ratio = np.mean(np.array(x_bench) >= 1)
         nplus1_ratios.append(ratio)
     plt.figure(figsize=(8,6))
@@ -73,31 +77,34 @@ def plot_lp_x_benchmark_ratio_vs_k(rabbi_sims, nplus1_sims, save_path=None, show
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path)
-    plt.show()
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
 
 if __name__ == "__main__":
-    param_file = 'params2.yml'
-    y_filename = os.path.join("data", 'Y_matrix_params2')
+    param_file = 'params.yml'
+    y_filename = os.path.join("data", 'Y_matrix_debug')
 
     print("\n===== RABBI 多倍率示例 =====")
-    rabbi_sims = run_rabbi_multi_k(param_file, y_filename)
+    rabbi_params = run_rabbi_multi_k(param_file, y_filename)
     print("\n===== OFFline 多倍率示例 =====")
-    offline_sims = run_offline_multi_k(param_file, y_filename)
+    offline_params = run_offline_multi_k(param_file, y_filename)
     print("\n===== NPlusOneLP 多倍率示例 =====")
-    nplus1_sims = run_nplusonelp_multi_k(param_file, y_filename)
+    nplus1_params = run_nplusonelp_multi_k(param_file, y_filename)
 
-    # 保存sim_list到shelve文件
-    from main import save_sim_list_to_shelve
-    shelve_path_rabbi = os.path.join("data", "shelve", "sim_rabbi_params2.shelve")
-    shelve_path_offline = os.path.join("data", "shelve", "sim_offline_params2.shelve")
-    shelve_path_nplusonelp = os.path.join("data", "shelve", "sim_nplusonelp_params2.shelve")
-    save_sim_list_to_shelve(rabbi_sims, shelve_path_rabbi)
-    save_sim_list_to_shelve(offline_sims, shelve_path_offline)
-    save_sim_list_to_shelve(nplus1_sims, shelve_path_nplusonelp)
+    # 保存params_list到shelve文件
+    from main import save_params_list_to_shelve
+    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params.shelve")
+    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params.shelve")
+    save_params_list_to_shelve(rabbi_params, shelve_path_rabbi)
+    save_params_list_to_shelve(offline_params, shelve_path_offline)
+    save_params_list_to_shelve(nplus1_params, shelve_path_nplusonelp)
 
     print("\n===== 绘制结果 =====")
-    save_path = os.path.join("data", "pics", "multi_k_results2.png")
-    plot_multi_k_ratio_results(rabbi_sims, offline_sims, nplus1_sims, save_path, show_plot=True)
+    save_path = os.path.join("data", "pics", "multi_k_results.png")
+    plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, save_path, show_plot=True)
     print("\n===== 绘制LP解基准比例 =====")
-    save_path = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
-    plot_lp_x_benchmark_ratio_vs_k(rabbi_sims, nplus1_sims, save_path, show_plot=True)
+    save_path = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k.png")
+    plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, save_path, show_plot=True)
