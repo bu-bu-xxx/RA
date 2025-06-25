@@ -1,6 +1,7 @@
 import os
 import matplotlib.pyplot as plt
-from main import run_rabbi_multi_k, run_offline_multi_k, run_nplusonelp_multi_k
+from main import run_multi_k
+from solver import RABBI, OFFline, NPlusOneLP
 import numpy as np
 
 def plot_multi_k_results(rabbi_params, offline_params, nplus1_params):
@@ -84,20 +85,23 @@ def plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, save_path=None, 
 
 if __name__ == "__main__":
     # 文件路径定义
-    param_file = 'params2.yml'
-    y_filename = os.path.join("data", 'Y_matrix_params2')
-    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params2.shelve")
-    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params2.shelve")
-    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params2.shelve")
-    save_path_results = os.path.join("data", "pics", "multi_k_results2.png")
-    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
+    param_file = 'params.yml'
+    y_filename = os.path.join("data", 'Y_matrix_params')
+    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params.shelve")
+    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params.shelve")
+    save_path_results = os.path.join("data", "pics", "multi_k_results.png")
+    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k.png")
 
-    print("\n===== RABBI 多倍率示例 =====")
-    rabbi_params = run_rabbi_multi_k(param_file, y_filename)
-    print("\n===== OFFline 多倍率示例 =====")
-    offline_params = run_offline_multi_k(param_file, y_filename)
-    print("\n===== NPlusOneLP 多倍率示例 =====")
-    nplus1_params = run_nplusonelp_multi_k(param_file, y_filename)
+    print("\n===== 运行多倍率示例 =====")
+    # 使用新的统一函数运行所有求解器
+    solver_classes = [RABBI, OFFline, NPlusOneLP]
+    results = run_multi_k(param_file, y_filename, solver_classes)
+    
+    # 从结果字典中提取各个params_list
+    rabbi_params = results['RABBI']
+    offline_params = results['OFFline']
+    nplus1_params = results['NPlusOneLP']
 
     # 保存params_list到shelve文件
     from main import save_params_list_to_shelve

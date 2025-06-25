@@ -54,7 +54,7 @@ class LPBasedPolicy:
             raise RuntimeError("LP solver failed: " + res.message)
 
 class RABBI(LPBasedPolicy):
-    def __init__(self, env):
+    def __init__(self, env, debug=False):
         super().__init__(env)
 
     def run(self):
@@ -83,7 +83,7 @@ class RABBI(LPBasedPolicy):
             #     break
 
 class OFFline(LPBasedPolicy):
-    def __init__(self, env):
+    def __init__(self, env, debug=False):
         super().__init__(env)
 
     def run(self):

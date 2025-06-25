@@ -8,12 +8,16 @@ import shelve
 
 # 顶层worker函数，支持多进程pickle
 
-def rabbi_worker(args):
-    i, k_val, param_file, y_filename = args
-    from solver import RABBI
+def universal_worker(args):
+    i, k_val, param_file, y_filename, solver_class_name = args
     from customer import CustomerChoiceSimulator
     import numpy as np
     import os
+    
+    # 动态导入solver类
+    exec(f"from solver import {solver_class_name}")
+    solver_class = locals()[solver_class_name]
+    
     sim = CustomerChoiceSimulator(param_file, random_seed=42)
     sim.params.B = sim.params.B * k_val
     sim.params.T = int(sim.params.T * k_val)
@@ -24,70 +28,19 @@ def rabbi_worker(args):
         sim.generate_Y_matrix()
         sim.save_Y(y_file)
     sim.compute_offline_Q()
-    rabbi = RABBI(sim)
-    rabbi.run()
-    print(f"[RABBI][k={k_val}] x_history shape:", np.array(sim.params.x_history).shape)
-    print(f"[RABBI][k={k_val}] alpha_history:", sim.params.alpha_history)
-    print(f"[RABBI][k={k_val}] j_history:", sim.params.j_history)
-    print(f"[RABBI][k={k_val}] b_history:", sim.params.b_history)
-    print(f"[RABBI][k={k_val}] reward_history:", sim.params.reward_history)
-    print(f"[RABBI][k={k_val}] Final inventory:", sim.params.b)
-    print(f"[RABBI][k={k_val}] total reward:", sum(sim.params.reward_history))
-    return (i, sim.params)
-
-def offline_worker(args):
-    i, k_val, param_file, y_filename = args
-    from solver import OFFline
-    from customer import CustomerChoiceSimulator
-    import numpy as np
-    import os
-    sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    sim.params.B = sim.params.B * k_val
-    sim.params.T = int(sim.params.T * k_val)
-    y_file = f"{y_filename}_k{int(k_val)}.npy"
-    if os.path.exists(y_file):
-        sim.load_Y(y_file)
-    else:
-        sim.generate_Y_matrix()
-        sim.save_Y(y_file)
-    sim.compute_offline_Q()
-    offline = OFFline(sim)
-    offline.run()
-    print(f"[OFFline][k={k_val}] x_history shape:", np.array(sim.params.x_history).shape)
-    print(f"[OFFline][k={k_val}] alpha_history:", sim.params.alpha_history)
-    print(f"[OFFline][k={k_val}] j_history:", sim.params.j_history)
-    print(f"[OFFline][k={k_val}] b_history:", sim.params.b_history)
-    print(f"[OFFline][k={k_val}] reward_history:", sim.params.reward_history)
-    print(f"[OFFline][k={k_val}] Final inventory:", sim.params.b)
-    print(f"[OFFline][k={k_val}] total reward:", sum(sim.params.reward_history))
-    return (i, sim.params)
-
-def nplusonelp_worker(args):
-    i, k_val, param_file, y_filename = args
-    from solver import NPlusOneLP
-    from customer import CustomerChoiceSimulator
-    import numpy as np
-    import os
-    sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    sim.params.B = sim.params.B * k_val
-    sim.params.T = int(sim.params.T * k_val)
-    y_file = f"{y_filename}_k{int(k_val)}.npy"
-    if os.path.exists(y_file):
-        sim.load_Y(y_file)
-    else:
-        sim.generate_Y_matrix()
-        sim.save_Y(y_file)
-    sim.compute_offline_Q()
-    rabbi_nplus1 = NPlusOneLP(sim, debug=False)
-    rabbi_nplus1.run()
-    print(f"[NPlusOneLP][k={k_val}] x_history shape:", np.array(sim.params.x_history).shape)
-    print(f"[NPlusOneLP][k={k_val}] alpha_history:", sim.params.alpha_history)
-    print(f"[NPlusOneLP][k={k_val}] j_history:", sim.params.j_history)
-    print(f"[NPlusOneLP][k={k_val}] b_history:", sim.params.b_history)
-    print(f"[NPlusOneLP][k={k_val}] reward_history:", sim.params.reward_history)
-    print(f"[NPlusOneLP][k={k_val}] Final inventory:", sim.params.b)
-    print(f"[NPlusOneLP][k={k_val}] total reward:", sum(sim.params.reward_history))
-    return (i, sim.params)
+    
+    # 创建求解器实例
+    solver = solver_class(sim, debug=False)
+    
+    solver.run()
+    print(f"[{solver_class_name}][k={k_val}] x_history shape:", np.array(sim.params.x_history).shape)
+    print(f"[{solver_class_name}][k={k_val}] alpha_history:", sim.params.alpha_history)
+    print(f"[{solver_class_name}][k={k_val}] j_history:", sim.params.j_history)
+    print(f"[{solver_class_name}][k={k_val}] b_history:", sim.params.b_history)
+    print(f"[{solver_class_name}][k={k_val}] reward_history:", sim.params.reward_history)
+    print(f"[{solver_class_name}][k={k_val}] Final inventory:", sim.params.b)
+    print(f"[{solver_class_name}][k={k_val}] total reward:", sum(sim.params.reward_history))
+    return (i, sim.params, solver_class_name)
 
 def run_rabbi(param_file, y_file):
     sim = CustomerChoiceSimulator(param_file, random_seed=42)
@@ -141,44 +94,57 @@ def run_nplusonelp(param_file, y_file):
     print("[NPlusOneLP] Final inventory:", sim.params.b)
     print("[NPlusOneLP] total reward:", sum(sim.params.reward_history))
 
-def run_rabbi_multi_k(param_file, y_filename, max_concurrency=None):
+def run_multi_k(param_file, y_filename, solver_classes, max_concurrency=None):
+    """
+    通用的多倍率运行函数
+    param_file: 参数文件路径
+    y_filename: Y矩阵文件前缀
+    solver_classes: 求解器类列表，如[RABBI, OFFline, NPlusOneLP]
+    max_concurrency: 最大并发数
+    返回: 字典，键为求解器名称，值为对应的params_list
+    """
     if max_concurrency is None:
         max_concurrency = os.cpu_count()
+    
     sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    k = sim.params.k  # 获取倍率列表, 所有sim实例都使用同一倍率列表
-    args_list = [(i, k_val, param_file, y_filename) for i, k_val in enumerate(k)]
+    k = sim.params.k  # 获取倍率列表
+    
+    # 合并所有solver_class的args_list
+    all_args_list = []
+    solver_k_mapping = {}  # 记录每个结果对应的solver和k的索引
+    
+    for solver_class in solver_classes:
+        solver_name = solver_class.__name__
+        print(f"\n===== 准备运行 {solver_name} 多倍率示例 =====")
+        
+        for i, k_val in enumerate(k):
+            args = (len(all_args_list), k_val, param_file, y_filename, solver_name)
+            all_args_list.append(args)
+            solver_k_mapping[len(all_args_list) - 1] = (solver_name, i)
+    
+    print(f"\n===== 开始并行运行所有任务，总共 {len(all_args_list)} 个任务 =====")
+    
+    # 一次性运行所有任务
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
-        results = list(executor.map(rabbi_worker, args_list))
-    results.sort(key=lambda x: x[0])
-    params_list = [params for i, params in results]
-    print(f"[RABBI] params_list length: {len(params_list)}")
-    return params_list
-
-def run_offline_multi_k(param_file, y_filename, max_concurrency=None):
-    if max_concurrency is None:
-        max_concurrency = os.cpu_count()
-    sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    k = sim.params.k
-    args_list = [(i, k_val, param_file, y_filename) for i, k_val in enumerate(k)]
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
-        results = list(executor.map(offline_worker, args_list))
-    results.sort(key=lambda x: x[0])
-    params_list = [params for i, params in results]
-    print(f"[OFFline] params_list length: {len(params_list)}")
-    return params_list
-
-def run_nplusonelp_multi_k(param_file, y_filename, max_concurrency=None):
-    if max_concurrency is None:
-        max_concurrency = os.cpu_count()
-    sim = CustomerChoiceSimulator(param_file, random_seed=42)
-    k = sim.params.k
-    args_list = [(i, k_val, param_file, y_filename) for i, k_val in enumerate(k)]
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
-        results = list(executor.map(nplusonelp_worker, args_list))
-    results.sort(key=lambda x: x[0])
-    params_list = [params for i, params in results]
-    print(f"[NPlusOneLP] params_list length: {len(params_list)}")
-    return params_list
+        all_results = list(executor.map(universal_worker, all_args_list))
+    
+    # 按solver分组整理结果
+    results_dict = {}
+    for solver_class in solver_classes:
+        solver_name = solver_class.__name__
+        results_dict[solver_name] = [None] * len(k)
+    
+    # 将结果分配到对应的solver和k位置
+    for result in all_results:
+        task_idx, params, solver_name = result
+        solver_name_mapped, k_idx = solver_k_mapping[task_idx]
+        results_dict[solver_name_mapped][k_idx] = params
+    
+    # 输出结果统计
+    for solver_name in results_dict:
+        print(f"[{solver_name}] params_list length: {len(results_dict[solver_name])}")
+    
+    return results_dict
 
 def compute_lp_x_benchmark(params) -> np.ndarray:
     """
@@ -235,12 +201,15 @@ if __name__ == "__main__":
     # print("\n===== NPlusOneLP 示例 =====")
     # run_nplusonelp(param_file, y_file)
     y_filename = os.path.join("data", 'Y_matrix_debug')
-    print("\n===== RABBI 多倍率示例 =====")
-    params_rabbi = run_rabbi_multi_k(param_file, y_filename)
-    print("\n===== OFFline 多倍率示例 =====")
-    params_offline = run_offline_multi_k(param_file, y_filename)
-    print("\n===== NPlusOneLP 多倍率示例 =====")
-    params_nplusonelp = run_nplusonelp_multi_k(param_file, y_filename)
+    
+    # 使用新的统一函数运行所有求解器
+    solver_classes = [RABBI, OFFline, NPlusOneLP]
+    results = run_multi_k(param_file, y_filename, solver_classes)
+    
+    # 从结果字典中提取各个params_list
+    params_rabbi = results['RABBI']
+    params_offline = results['OFFline']
+    params_nplusonelp = results['NPlusOneLP']
 
     # 计算x_benchmark
     print("\n===== 计算LP解基准 =====\n")
