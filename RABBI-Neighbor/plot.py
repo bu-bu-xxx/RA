@@ -83,8 +83,14 @@ def plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, save_path=None, 
         plt.close()
 
 if __name__ == "__main__":
-    param_file = 'params.yml'
-    y_filename = os.path.join("data", 'Y_matrix_debug')
+    # 文件路径定义
+    param_file = 'params2.yml'
+    y_filename = os.path.join("data", 'Y_matrix_params2')
+    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params2.shelve")
+    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params2.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params2.shelve")
+    save_path_results = os.path.join("data", "pics", "multi_k_results2.png")
+    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
 
     print("\n===== RABBI 多倍率示例 =====")
     rabbi_params = run_rabbi_multi_k(param_file, y_filename)
@@ -95,16 +101,11 @@ if __name__ == "__main__":
 
     # 保存params_list到shelve文件
     from main import save_params_list_to_shelve
-    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params.shelve")
-    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params.shelve")
-    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params.shelve")
     save_params_list_to_shelve(rabbi_params, shelve_path_rabbi)
     save_params_list_to_shelve(offline_params, shelve_path_offline)
     save_params_list_to_shelve(nplus1_params, shelve_path_nplusonelp)
 
     print("\n===== 绘制结果 =====")
-    save_path = os.path.join("data", "pics", "multi_k_results.png")
-    plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, save_path, show_plot=True)
+    plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, save_path_results, show_plot=False)
     print("\n===== 绘制LP解基准比例 =====")
-    save_path = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k.png")
-    plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, save_path, show_plot=True)
+    plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, save_path_lp_benchmark, show_plot=False)
