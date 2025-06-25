@@ -1,5 +1,5 @@
 import os
-from solver import RABBI, OFFline, NPlusOneLP
+from solver import RABBI, OFFline, NPlusOneLP, TopKLP
 import numpy as np
 from customer import CustomerChoiceSimulator
 import concurrent.futures
@@ -30,7 +30,10 @@ def universal_worker(args):
     sim.compute_offline_Q()
     
     # 创建求解器实例
-    solver = solver_class(sim, debug=False)
+    if solver_class_name == 'TopKLP':
+        solver = solver_class(sim, topk=3, debug=False)  ################## 使用默认topk
+    else:
+        solver = solver_class(sim, debug=False)
     
     solver.run()
     print(f"[{solver_class_name}][k={k_val}] x_history shape:", np.array(sim.params.x_history).shape)
@@ -203,39 +206,46 @@ if __name__ == "__main__":
     y_filename = os.path.join("data", 'Y_matrix_debug')
     
     # 使用新的统一函数运行所有求解器
-    solver_classes = [RABBI, OFFline, NPlusOneLP]
+    solver_classes = [RABBI, OFFline, NPlusOneLP, TopKLP]
     results = run_multi_k(param_file, y_filename, solver_classes)
     
     # 从结果字典中提取各个params_list
     params_rabbi = results['RABBI']
     params_offline = results['OFFline']
     params_nplusonelp = results['NPlusOneLP']
+    params_topklp = results['TopKLP']
 
     # 计算x_benchmark
     print("\n===== 计算LP解基准 =====\n")
     rabbi_x_benchmark = compute_lp_x_benchmark(params_rabbi[0])  # 只取第一个params作为基准
     offline_x_benchmark = compute_lp_x_benchmark(params_offline[0])
     nplus1_x_benchmark = compute_lp_x_benchmark(params_nplusonelp[0])
+    topklp_x_benchmark = compute_lp_x_benchmark(params_topklp[0])
     print("[RABBI] x_benchmark:", rabbi_x_benchmark)
     print("[OFFline] x_benchmark:", offline_x_benchmark)
     print("[NPlusOneLP] x_benchmark:", nplus1_x_benchmark)
+    print("[TopKLP] x_benchmark:", topklp_x_benchmark)
 
     # 保存params_list到shelve文件
     shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi.shelve")
     shelve_path_offline = os.path.join("data", "shelve", "params_offline.shelve")
     shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp.shelve")
+    shelve_path_topklp = os.path.join("data", "shelve", "params_topklp.shelve")
     save_params_list_to_shelve(params_rabbi, shelve_path_rabbi)
     save_params_list_to_shelve(params_offline, shelve_path_offline)
     save_params_list_to_shelve(params_nplusonelp, shelve_path_nplusonelp)
+    save_params_list_to_shelve(params_topklp, shelve_path_topklp)
 
     # 从shelve文件加载params_list示例
     print("\n===== 从shelve文件加载params_list示例 =====")
     loaded_params_rabbi = load_params_list_from_shelve(shelve_path_rabbi)
     loaded_params_offline = load_params_list_from_shelve(shelve_path_offline)
     loaded_params_nplusonelp = load_params_list_from_shelve(shelve_path_nplusonelp)
+    loaded_params_topklp = load_params_list_from_shelve(shelve_path_topklp)
     print(f"[Loaded RABBI] params_list length: {len(loaded_params_rabbi)}")
     print(f"[Loaded OFFline] params_list length: {len(loaded_params_offline)}")
     print(f"[Loaded NPlusOneLP] params_list length: {len(loaded_params_nplusonelp)}")
+    print(f"[Loaded TopKLP] params_list length: {len(loaded_params_topklp)}")
 
 
 
