@@ -94,19 +94,19 @@ def plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, topklp_params, s
 
 if __name__ == "__main__":
     # 文件路径定义
-    param_file = 'params.yml'
-    y_filename = os.path.join("data", 'Y_matrix_params')
-    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params.shelve")
-    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params.shelve")
-    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params.shelve")
-    shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params.shelve")
-    save_path_results = os.path.join("data", "pics", "multi_k_results.png")
-    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k.png")
+    param_file = 'params2.yml'
+    y_filename = os.path.join("data", 'Y_matrix_params2')
+    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params2.shelve")
+    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params2.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params2.shelve")
+    shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params2.shelve")
+    save_path_results = os.path.join("data", "pics", "multi_k_results2.png")
+    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
 
     print("\n===== 运行多倍率示例 =====")
     # 使用新的统一函数运行所有求解器
     solver_classes = [RABBI, OFFline, NPlusOneLP, TopKLP]
-    results = run_multi_k(param_file, y_filename, solver_classes)
+    results = run_multi_k(param_file, y_filename, solver_classes, max_concurrency=4)
     
     # 从结果字典中提取各个params_list
     rabbi_params = results['RABBI']
