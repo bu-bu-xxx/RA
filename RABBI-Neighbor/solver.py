@@ -202,9 +202,37 @@ class NPlusOneLP(LPBasedPolicy):
         return res.x
 
     @staticmethod
+    def get_relative_position(p_star, price_grid, n):
+        """
+        计算每个产品价格的相对位置
+        :param p_star: 最优连续价格向量
+        :param price_grid: 离散价格集合 (列表的列表)
+        :param n: 产品数量
+        :return: 相对位置向量
+        """
+        relative_positions = []
+        
+        for i in range(n):
+            prices = price_grid[i]
+            # 找到下界和上界
+            lower = max([p for p in prices if p <= p_star[i]], default=min(prices))
+            upper = min([p for p in prices if p >= p_star[i]], default=max(prices))
+            
+            # 计算相对位置：(p_i - lower) / (upper - lower)
+            if upper == lower:
+                relative_pos = 0.0  # 如果上下界相等，相对位置为0
+            else:
+                relative_pos = (p_star[i] - lower) / (upper - lower)
+            
+            relative_positions.append(relative_pos)
+        
+        return relative_positions
+
+    @staticmethod
     def find_neighbors(p_star, price_grid, n, debug=False, debug_tag="find_neighbors"):
         """
         步骤2: 找到每个产品的最优连续价格对应的离散价格邻居
+        使用相对位置排序的方法生成邻居
         :param p_star: 最优连续价格向量
         :param price_grid: 离散价格集合 (列表的列表)
         :param n: 产品数量
@@ -212,7 +240,6 @@ class NPlusOneLP(LPBasedPolicy):
         :param debug_tag: 调试标签
         :return: 邻居价格向量列表 (N+1个)
         """
-        neighbors = []
         # 找到每个产品的上下界离散价格
         lower_bounds = []
         upper_bounds = []
@@ -226,19 +253,48 @@ class NPlusOneLP(LPBasedPolicy):
             lower_bounds.append(lower)
             upper_bounds.append(upper)
         
+        # 计算每个产品的相对位置
+        relative_positions = NPlusOneLP.get_relative_position(p_star, price_grid, n)
+        
+        # 根据相对位置进行排序，获得排序后的索引
+        # 相对位置越大的产品，在排序中越靠前
+        sorted_indices = sorted(range(n), key=lambda i: relative_positions[i], reverse=True)
+        
+        NPlusOneLP._debug_print(debug_tag, debug, "relative_positions:", relative_positions)
+        NPlusOneLP._debug_print(debug_tag, debug, "sorted_indices:", sorted_indices)
+        
+        neighbors = []
+        
         # 构造邻居向量 (N+1个)
         # 第一个: 所有产品都使用下界
-        neighbors.append(lower_bounds)
-        # 后N个: 前i个位置用上界，其余用下界
+        base_neighbor = lower_bounds.copy()
+        neighbors.append(base_neighbor)
+        
+        # 后N个: 按照排序后的顺序，前i个位置用上界，其余用下界
         for i in range(1, n+1):
-            neighbor = [upper_bounds[j] if j < i else lower_bounds[j] for j in range(n)]
+            neighbor = lower_bounds.copy()  # 从下界开始
+            # 按排序后的顺序，前i个位置用上界
+            for j in range(i):
+                idx = sorted_indices[j]  # 获取原始索引
+                neighbor[idx] = upper_bounds[idx]  # 在原始位置设置上界
             neighbors.append(neighbor)
+        
+        # 去除重复的邻居 (当relative_pos=0时，upper_bound == lower_bound会产生重复)
+        unique_neighbors = []
+        seen = set()
+        for neighbor in neighbors:
+            neighbor_tuple = tuple(neighbor)
+            if neighbor_tuple not in seen:
+                seen.add(neighbor_tuple)
+                unique_neighbors.append(neighbor)
         
         NPlusOneLP._debug_print(debug_tag, debug, "p_star:", p_star, "shape:", np.shape(p_star))
         NPlusOneLP._debug_print(debug_tag, debug, "lower_bounds:", lower_bounds, "shape:", np.shape(lower_bounds))
         NPlusOneLP._debug_print(debug_tag, debug, "upper_bounds:", upper_bounds, "shape:", np.shape(upper_bounds))
-        NPlusOneLP._debug_print(debug_tag, debug, "neighbors:", neighbors, "shape:", np.shape(neighbors))
-        return neighbors
+        NPlusOneLP._debug_print(debug_tag, debug, f"Generated {len(neighbors)} neighbors before deduplication")
+        NPlusOneLP._debug_print(debug_tag, debug, f"Generated {len(unique_neighbors)} unique neighbors after deduplication")
+        NPlusOneLP._debug_print(debug_tag, debug, "unique_neighbors:", unique_neighbors, "shape:", np.shape(unique_neighbors))
+        return unique_neighbors
 
     @staticmethod
     def solve_n_plus_one_lp(neighbors, d_attract, mu, u0, gamma, A, d, b, T, t, debug=False, debug_tag="solve_n_plus_one_lp"):

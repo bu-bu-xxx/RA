@@ -5,17 +5,32 @@ from solver import RABBI, OFFline, NPlusOneLP, TopKLP
 import numpy as np
 
 def plot_multi_k_results(rabbi_params, offline_params, nplus1_params):
-    # 提取k和reward
-    rabbi_rewards = [sum(params.reward_history) for params in rabbi_params]
-    offline_rewards = [sum(params.reward_history) for params in offline_params]
-    nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
-    # 直接用params.k
-    k_list = rabbi_params[0].k if hasattr(rabbi_params[0], 'k') else list(range(len(rabbi_params)))
+    # 获取k_list
+    k_list = None
+    for params in [rabbi_params, offline_params, nplus1_params]:
+        if params is not None and len(params) > 0:
+            k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
+            break
+    
+    if k_list is None:
+        print("Warning: No valid params provided for plotting")
+        return
 
     plt.figure(figsize=(8,6))
-    plt.plot(k_list, rabbi_rewards, marker='o', label='RABBI')
-    plt.plot(k_list, offline_rewards, marker='s', label='OFFline')
-    plt.plot(k_list, nplus1_rewards, marker='^', label='NPlusOneLP')
+    
+    # 只绘制非None的params
+    if rabbi_params is not None:
+        rabbi_rewards = [sum(params.reward_history) for params in rabbi_params]
+        plt.plot(k_list, rabbi_rewards, marker='o', label='RABBI')
+    
+    if offline_params is not None:
+        offline_rewards = [sum(params.reward_history) for params in offline_params]
+        plt.plot(k_list, offline_rewards, marker='s', label='OFFline')
+    
+    if nplus1_params is not None:
+        nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
+        plt.plot(k_list, nplus1_rewards, marker='^', label='NPlusOneLP')
+    
     plt.xlabel('k (scaling factor)')
     plt.ylabel('Total Reward')
     plt.title('Total Reward vs k for Different Policies')
@@ -25,19 +40,42 @@ def plot_multi_k_results(rabbi_params, offline_params, nplus1_params):
     plt.show()
 
 def plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path=None, show_plot=False):
-    rabbi_rewards = [sum(params.reward_history) for params in rabbi_params]
+    # 获取k_list
+    k_list = None
+    for params in [rabbi_params, offline_params, nplus1_params, topklp_params]:
+        if params is not None and len(params) > 0:
+            k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
+            break
+    
+    if k_list is None:
+        raise ValueError("No valid params provided for plotting")
+        return
+    
+    # 获取offline_rewards作为基准，如果offline_params为None则无法计算比例
+    if offline_params is None:
+        raise ValueError("offline_params is None, cannot compute ratios")
+        return
+    
     offline_rewards = [sum(params.reward_history) for params in offline_params]
-    nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
-    topklp_rewards = [sum(params.reward_history) for params in topklp_params]
-    k_list = rabbi_params[0].k if hasattr(rabbi_params[0], 'k') else list(range(len(rabbi_params)))
-    rabbi_ratio = [r/o if o != 0 else 0 for r, o in zip(rabbi_rewards, offline_rewards)]
-    nplus1_ratio = [n/o if o != 0 else 0 for n, o in zip(nplus1_rewards, offline_rewards)]
-    topklp_ratio = [t/o if o != 0 else 0 for t, o in zip(topklp_rewards, offline_rewards)]
 
     plt.figure(figsize=(8,6))
-    plt.plot(k_list, rabbi_ratio, marker='o', label='RABBI / OFFline')
-    plt.plot(k_list, nplus1_ratio, marker='^', label='NPlusOneLP / OFFline')
-    plt.plot(k_list, topklp_ratio, marker='s', label='TopKLP / OFFline')
+    
+    # 只绘制非None的params
+    if rabbi_params is not None:
+        rabbi_rewards = [sum(params.reward_history) for params in rabbi_params]
+        rabbi_ratio = [r/o if o != 0 else 0 for r, o in zip(rabbi_rewards, offline_rewards)]
+        plt.plot(k_list, rabbi_ratio, marker='o', label='RABBI / OFFline')
+    
+    if nplus1_params is not None:
+        nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
+        nplus1_ratio = [n/o if o != 0 else 0 for n, o in zip(nplus1_rewards, offline_rewards)]
+        plt.plot(k_list, nplus1_ratio, marker='^', label='NPlusOneLP / OFFline')
+    
+    if topklp_params is not None:
+        topklp_rewards = [sum(params.reward_history) for params in topklp_params]
+        topklp_ratio = [t/o if o != 0 else 0 for t, o in zip(topklp_rewards, offline_rewards)]
+        plt.plot(k_list, topklp_ratio, marker='s', label='TopKLP / OFFline')
+    
     plt.xlabel('k (scaling factor)')
     plt.ylabel('Reward Ratio to OFFline')
     plt.title('Reward Ratio vs k')
@@ -59,26 +97,44 @@ def plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, topklp_params, s
     并画plot，x轴为params.k，y轴为比例，三组曲线同图展示。
     """
     from main import compute_lp_x_benchmark
-    k_list = rabbi_params[0].k
-    rabbi_ratios = []
-    nplus1_ratios = []
-    topklp_ratios = []
-    for params in rabbi_params:
-        x_bench = compute_lp_x_benchmark(params)
-        ratio = np.mean(np.array(x_bench) >= 1)
-        rabbi_ratios.append(ratio)
-    for params in nplus1_params:
-        x_bench = compute_lp_x_benchmark(params)
-        ratio = np.mean(np.array(x_bench) >= 1)
-        nplus1_ratios.append(ratio)
-    for params in topklp_params:
-        x_bench = compute_lp_x_benchmark(params)
-        ratio = np.mean(np.array(x_bench) >= 1)
-        topklp_ratios.append(ratio)
+    
+    # 获取k_list
+    k_list = None
+    for params in [rabbi_params, nplus1_params, topklp_params]:
+        if params is not None and len(params) > 0:
+            k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
+            break
+    if k_list is None:
+        print("Warning: No valid params provided for plotting")
+        return
+
     plt.figure(figsize=(8,6))
-    plt.plot(k_list, rabbi_ratios, marker='o', label='RABBI LP x_benchmark >= 1(satisfy) ratio')
-    plt.plot(k_list, nplus1_ratios, marker='^', label='NPlusOneLP LP x_benchmark >= 1(satisfy) ratio')
-    plt.plot(k_list, topklp_ratios, marker='s', label='TopKLP LP x_benchmark >= 1(satisfy) ratio')
+    
+    # 只计算和绘制非None的params
+    if rabbi_params is not None:
+        rabbi_ratios = []
+        for params in rabbi_params:
+            x_bench = compute_lp_x_benchmark(params)
+            ratio = np.mean(np.array(x_bench) >= 1)
+            rabbi_ratios.append(ratio)
+        plt.plot(k_list, rabbi_ratios, marker='o', label='RABBI LP x_benchmark >= 1(satisfy) ratio')
+
+    if nplus1_params is not None:
+        nplus1_ratios = []
+        for params in nplus1_params:
+            x_bench = compute_lp_x_benchmark(params)
+            ratio = np.mean(np.array(x_bench) >= 1)
+            nplus1_ratios.append(ratio)
+        plt.plot(k_list, nplus1_ratios, marker='^', label='NPlusOneLP LP x_benchmark >= 1(satisfy) ratio')
+    
+    if topklp_params is not None:
+        topklp_ratios = []
+        for params in topklp_params:
+            x_bench = compute_lp_x_benchmark(params)
+            ratio = np.mean(np.array(x_bench) >= 1)
+            topklp_ratios.append(ratio)
+        plt.plot(k_list, topklp_ratios, marker='s', label='TopKLP LP x_benchmark >= 1(satisfy) ratio')
+    
     plt.xlabel('k (scaling factor)')
     plt.ylabel('Proportion of x_benchmark >= 1')
     plt.title('Proportion of LP x_benchmark >= 1 vs k')
@@ -100,7 +156,7 @@ if __name__ == "__main__":
     shelve_path_offline = os.path.join("data", "shelve", "params_offline_params2.shelve")
     shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params2.shelve")
     shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params2.shelve")
-    save_path_results = os.path.join("data", "pics", "multi_k_results2.png")
+    save_path_ratio_results = os.path.join("data", "pics", "multi_k_ratio_results2.png")
     save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
 
     print("\n===== 运行多倍率示例 =====")
@@ -121,7 +177,7 @@ if __name__ == "__main__":
     save_params_list_to_shelve(nplus1_params, shelve_path_nplusonelp)
     save_params_list_to_shelve(topklp_params, shelve_path_topklp)
 
-    print("\n===== 绘制结果 =====")
-    plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path_results, show_plot=False)
-    print("\n===== 绘制LP解基准比例 =====")
+    print("\n===== 正在绘制ratio result结果 =====")
+    plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path_ratio_results, show_plot=False)
+    print("\n===== 正在绘制LP解基准比例 =====")
     plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, topklp_params, save_path_lp_benchmark, show_plot=False)

@@ -31,7 +31,9 @@ def universal_worker(args):
     
     # 创建求解器实例
     if solver_class_name == 'TopKLP':
-        solver = solver_class(sim, topk=5, debug=False)  ################## 使用默认topk
+        # 动态设置topk，不能超过产品数量
+        topk = min(5, sim.params.n)
+        solver = solver_class(sim, topk=topk, debug=False)
     else:
         solver = solver_class(sim, debug=False)
     
