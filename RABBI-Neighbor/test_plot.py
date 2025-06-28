@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from main import run_multi_k
 from solver import RABBI, OFFline, NPlusOneLP, TopKLP
 import numpy as np
-from plot import plot_multi_k_ratio_results, plot_lp_x_benchmark_ratio_vs_k
+from plot import plot_multi_k_ratio_results, plot_lp_x_benchmark_ratio_vs_k, plot_multi_k_regret, plot_multi_k_results
 
 def test_plot_functions():
     """
@@ -20,6 +20,8 @@ def test_plot_functions():
     shelve_path_topklp = os.path.join("data", "shelve", "debug_params_topklp.shelve")
     save_path_ratio_results = os.path.join("data", "pics", "debug_multi_k_ratio_results.png")
     save_path_lp_benchmark = os.path.join("data", "pics", "debug_lp_x_benchmark_ratio_vs_k.png")
+    save_path_regret_results = os.path.join("data", "pics", "debug_multi_k_regret_results.png")
+    save_path_multi_k_results = os.path.join("data", "pics", "debug_multi_k_results.png")
 
     # 确保输出目录存在
     os.makedirs(os.path.join("data", "shelve"), exist_ok=True)
@@ -74,6 +76,26 @@ def test_plot_functions():
             print(f"Ratio结果图已保存到: {save_path_ratio_results}")
         except Exception as e:
             print(f"绘制ratio结果时出错: {e}")
+
+        print("\n===== 测试绘制regret结果 =====")
+        try:
+            plot_multi_k_regret(
+                rabbi_params, offline_params, nplus1_params, topklp_params, 
+                save_path_regret_results, show_plot=False
+            )
+            print(f"Regret结果图已保存到: {save_path_regret_results}")
+        except Exception as e:
+            print(f"绘制regret结果时出错: {e}")
+
+        print("\n===== 测试绘制多算法总奖励结果 =====")
+        try:
+            plot_multi_k_results(
+                rabbi_params, offline_params, nplus1_params, topklp_params,
+                save_path=save_path_multi_k_results, show_plot=False
+            )
+            print(f"多算法总奖励图已保存到: {save_path_multi_k_results}")
+        except Exception as e:
+            print(f"绘制多算法总奖励结果时出错: {e}")
 
         print("\n===== 测试绘制LP解基准比例 =====")
         try:

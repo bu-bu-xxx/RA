@@ -446,7 +446,7 @@ class NPlusOneLP(LPBasedPolicy):
 
 
 class TopKLP(LPBasedPolicy):
-    def __init__(self, env, topk=2, debug=False):
+    def __init__(self, env, debug=False):
         super().__init__(env)
         self.n = env.params.n  # 产品数量
         self.d = env.params.d  # 资源种类数量
@@ -460,11 +460,12 @@ class TopKLP(LPBasedPolicy):
         self.A = env.params.A  # 资源消耗矩阵 (n, d)
         self.T = env.params.T  # 总时间步数
         self.env = env  # 环境实例
-        self.topk = topk  # Top-K参数
+        self.topk = env.params.topk  # 从params中读取Top-K参数
         
         # 验证topk参数
         if self.topk > self.n:
-            raise ValueError(f"topk ({self.topk}) 不能大于产品数量 n ({self.n})")
+            self.topk = self.n  # 如果topk大于产品数量，限制为n
+            print(f"Top-K parameter {self.topk} exceeds product count {self.n}, resetting to {self.n}")
         # 存储上一轮的结果
         self.p_star_prev = None
         self.zeta_star_prev = None
@@ -789,7 +790,7 @@ if __name__ == "__main__":
     else:
         sim_topk.generate_Y_matrix()
         sim_topk.save_Y(Y_path)
-    rabbi_topk = TopKLP(sim_topk, topk=3, debug=False)
+    rabbi_topk = TopKLP(sim_topk, debug=False)
     rabbi_topk.run()
     print("[TopKLP] x_history shape:", np.array(sim_topk.params.x_history).shape)
     print("[TopKLP] x_history:", sim_topk.params.x_history)

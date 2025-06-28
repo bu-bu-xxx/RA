@@ -11,6 +11,7 @@ price_set_matrix:
 horizon: 20
 budget: [10, 8]
 scaling_list: [1, 5, 20]
+topk: 3
 demand_model: "MNL"
 
 MNL:

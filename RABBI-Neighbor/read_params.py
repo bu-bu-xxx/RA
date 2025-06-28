@@ -58,6 +58,7 @@ class ParamsLoader:
         self.params.T = int(yaml_params['horizon']) # horizon T
         self.params.B = np.array(yaml_params['budget'], dtype=float) # budget (d,)
         self.params.k = np.array(yaml_params['scaling_list'], dtype=float) # scaling list 
+        self.params.topk = int(yaml_params.get('topk', 9999))  # TopKLP的top-k参数
         self.params.f = self.generate_price_combinations(self.params.f_split) # (n, m) price matrix
         self.params.m = self.params.f.shape[1]  # 价格集数量
 

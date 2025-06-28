@@ -30,12 +30,7 @@ def universal_worker(args):
     sim.compute_offline_Q()
     
     # 创建求解器实例
-    if solver_class_name == 'TopKLP':
-        # 动态设置topk，不能超过产品数量
-        topk = min(5, sim.params.n)
-        solver = solver_class(sim, topk=topk, debug=False)
-    else:
-        solver = solver_class(sim, debug=False)
+    solver = solver_class(sim, debug=False)
     
     solver.run()
     print(f"[{solver_class_name}][k={k_val}] x_history shape:", np.array(sim.params.x_history).shape)

@@ -4,10 +4,10 @@ from main import run_multi_k
 from solver import RABBI, OFFline, NPlusOneLP, TopKLP
 import numpy as np
 
-def plot_multi_k_results(rabbi_params, offline_params, nplus1_params):
+def plot_multi_k_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path=None, show_plot=False):
     # 获取k_list
     k_list = None
-    for params in [rabbi_params, offline_params, nplus1_params]:
+    for params in [rabbi_params, offline_params, nplus1_params, topklp_params]:
         if params is not None and len(params) > 0:
             k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
             break
@@ -31,13 +31,22 @@ def plot_multi_k_results(rabbi_params, offline_params, nplus1_params):
         nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
         plt.plot(k_list, nplus1_rewards, marker='^', label='NPlusOneLP')
     
+    if topklp_params is not None:
+        topklp_rewards = [sum(params.reward_history) for params in topklp_params]
+        plt.plot(k_list, topklp_rewards, marker='d', label='TopKLP')
+    
     plt.xlabel('k (scaling factor)')
     plt.ylabel('Total Reward')
     plt.title('Total Reward vs k for Different Policies')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    if save_path:
+        plt.savefig(save_path)
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
 
 def plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path=None, show_plot=False):
     # 获取k_list
@@ -79,6 +88,60 @@ def plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topk
     plt.xlabel('k (scaling factor)')
     plt.ylabel('Reward Ratio to OFFline')
     plt.title('Reward Ratio vs k')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+
+def plot_multi_k_regret(rabbi_params, offline_params, nplus1_params, topklp_params, save_path=None, show_plot=False):
+    """
+    绘制不同算法相对于offline的regret值：offline_reward - other_reward
+    """
+    # 获取k_list
+    k_list = None
+    for params in [rabbi_params, offline_params, nplus1_params, topklp_params]:
+        if params is not None and len(params) > 0:
+            k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
+            break
+    
+    if k_list is None:
+        raise ValueError("No valid params provided for plotting")
+        return
+    
+    # 获取offline_rewards作为基准，如果offline_params为None则无法计算regret
+    if offline_params is None:
+        raise ValueError("offline_params is None, cannot compute regret")
+        return
+    
+    offline_rewards = [sum(params.reward_history) for params in offline_params]
+
+    plt.figure(figsize=(8,6))
+    
+    # 只绘制非None的params
+    if rabbi_params is not None:
+        rabbi_rewards = [sum(params.reward_history) for params in rabbi_params]
+        rabbi_regret = [o - r for r, o in zip(rabbi_rewards, offline_rewards)]
+        plt.plot(k_list, rabbi_regret, marker='o', label='OFFline - RABBI')
+    
+    if nplus1_params is not None:
+        nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
+        nplus1_regret = [o - n for n, o in zip(nplus1_rewards, offline_rewards)]
+        plt.plot(k_list, nplus1_regret, marker='^', label='OFFline - NPlusOneLP')
+    
+    if topklp_params is not None:
+        topklp_rewards = [sum(params.reward_history) for params in topklp_params]
+        topklp_regret = [o - t for t, o in zip(topklp_rewards, offline_rewards)]
+        plt.plot(k_list, topklp_regret, marker='s', label='OFFline - TopKLP')
+    
+    plt.xlabel('k (scaling factor)')
+    plt.ylabel('Regret (OFFline - Other)')
+    plt.title('Regret vs k')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -158,6 +221,8 @@ if __name__ == "__main__":
     shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params2.shelve")
     save_path_ratio_results = os.path.join("data", "pics", "multi_k_ratio_results2.png")
     save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
+    save_path_regret_results = os.path.join("data", "pics", "multi_k_regret_results2.png")
+    save_path_multi_k_results = os.path.join("data", "pics", "multi_k_results2.png")
 
     print("\n===== 运行多倍率示例 =====")
     # 使用新的统一函数运行所有求解器
@@ -179,5 +244,9 @@ if __name__ == "__main__":
 
     print("\n===== 正在绘制ratio result结果 =====")
     plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path_ratio_results, show_plot=False)
+    print("\n===== 正在绘制regret结果 =====")
+    plot_multi_k_regret(rabbi_params, offline_params, nplus1_params, topklp_params, save_path_regret_results, show_plot=False)
+    print("\n===== 正在绘制多算法总奖励结果 =====")
+    plot_multi_k_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path_multi_k_results, show_plot=False)
     print("\n===== 正在绘制LP解基准比例 =====")
     plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, topklp_params, save_path_lp_benchmark, show_plot=False)
