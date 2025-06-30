@@ -733,7 +733,7 @@ if __name__ == "__main__":
     # 生成Y矩阵
     # sim.generate_Y_matrix()  
     # 加载已保存的Y矩阵
-    Y_path = os.path.join("data", 'Y_matrix_debug.npy')
+    Y_path = os.path.join("data", "Y", 'Y_matrix_debug.npy')
     if os.path.exists(Y_path):
         sim.load_Y(Y_path)
     else:

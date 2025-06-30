@@ -212,9 +212,14 @@ def plot_lp_x_benchmark_ratio_vs_k(rabbi_params, nplus1_params, topklp_params, s
         plt.close()
 
 if __name__ == "__main__":
+    # 确保输出目录存在
+    os.makedirs(os.path.join("data", "Y"), exist_ok=True)
+    os.makedirs(os.path.join("data", "shelve"), exist_ok=True)
+    os.makedirs(os.path.join("data", "pics"), exist_ok=True)
+    
     # 文件路径定义
     param_file = 'params2.yml'
-    y_filename = os.path.join("data", 'Y_matrix_params2')
+    y_filename = os.path.join("data", "Y", 'Y_matrix_params2')
     shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params2.shelve")
     shelve_path_offline = os.path.join("data", "shelve", "params_offline_params2.shelve")
     shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params2.shelve")
@@ -224,10 +229,17 @@ if __name__ == "__main__":
     save_path_regret_results = os.path.join("data", "pics", "multi_k_regret_results2.png")
     save_path_multi_k_results = os.path.join("data", "pics", "multi_k_results2.png")
 
-    print("\n===== 运行多倍率示例 =====")
-    # 使用新的统一函数运行所有求解器
+    print("\n===== 运行多倍率示例 (带缓存) =====")
+    # 使用带缓存的智能函数运行所有求解器
+    from main import run_multi_k_with_cache
     solver_classes = [RABBI, OFFline, NPlusOneLP, TopKLP]
-    results = run_multi_k(param_file, y_filename, solver_classes, max_concurrency=4)
+    results = run_multi_k_with_cache(
+        param_file, y_filename, solver_classes, max_concurrency=4,
+        shelve_path_rabbi=shelve_path_rabbi,
+        shelve_path_offline=shelve_path_offline,
+        shelve_path_nplusonelp=shelve_path_nplusonelp,
+        shelve_path_topklp=shelve_path_topklp
+    )
     
     # 从结果字典中提取各个params_list
     rabbi_params = results['RABBI']
@@ -235,12 +247,8 @@ if __name__ == "__main__":
     nplus1_params = results['NPlusOneLP']
     topklp_params = results['TopKLP']
 
-    # 保存params_list到shelve文件
-    from main import save_params_list_to_shelve
-    save_params_list_to_shelve(rabbi_params, shelve_path_rabbi)
-    save_params_list_to_shelve(offline_params, shelve_path_offline)
-    save_params_list_to_shelve(nplus1_params, shelve_path_nplusonelp)
-    save_params_list_to_shelve(topklp_params, shelve_path_topklp)
+    # 不需要再单独保存，因为已经在运行过程中实时保存了
+    print("数据已在运行过程中自动保存到shelve文件")
 
     print("\n===== 正在绘制ratio result结果 =====")
     plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topklp_params, save_path_ratio_results, show_plot=False)

@@ -70,7 +70,7 @@ if __name__ == "__main__":
     print("示例：第1个时间步的Q矩阵\n", Q[1])
     print("示例：第19个时间步的Q矩阵\n", Q[19])
     # 保存和读取Y示例
-    data_dir = os.path.join(os.getcwd(), "data")
+    data_dir = os.path.join(os.getcwd(), "data", "Y")
     os.makedirs(data_dir, exist_ok=True)
     Y_path = os.path.join(data_dir, "Y_matrix_debug.npy")
     sim.save_Y(Y_path)
