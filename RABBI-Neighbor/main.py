@@ -281,8 +281,10 @@ def run_multi_k_with_cache(param_file, y_filename, solver_classes, max_concurren
                 try:
                     result = future.result()
                     if result is not None:
+                        task_idx, params, solver_class_name = result
+                        total_reward = sum(params.reward_history)
                         success_count += 1
-                        print(f"[{solver_name}][k={k_val}] 任务完成并保存")
+                        print(f"[{solver_name}][k={k_val}] 任务完成，total reward: {total_reward}")
                     else:
                         failed_count += 1
                         print(f"[{solver_name}][k={k_val}] 任务返回None")
@@ -372,7 +374,7 @@ def cached_worker(args):
         with shelve.open(shelve_path) as db:
             db[f'params_{k_idx}'] = sim.params
         
-        print(f"[{solver_class_name}][k={k_val}] 任务完成，total reward: {sum(sim.params.reward_history)}")
+        # 不在这里打印，让主进程打印
         return (task_idx, sim.params, solver_class_name)
         
     except Exception as e:
