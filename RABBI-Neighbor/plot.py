@@ -218,16 +218,16 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("data", "pics"), exist_ok=True)
     
     # 文件路径定义
-    param_file = 'params2.yml'
-    y_filename = os.path.join("data", "Y", 'Y_matrix_params2')
-    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params2.shelve")
-    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params2.shelve")
-    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params2.shelve")
-    shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params2.shelve")
-    save_path_ratio_results = os.path.join("data", "pics", "multi_k_ratio_results2.png")
-    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k2.png")
-    save_path_regret_results = os.path.join("data", "pics", "multi_k_regret_results2.png")
-    save_path_multi_k_results = os.path.join("data", "pics", "multi_k_results2.png")
+    param_file = 'params.yml'
+    y_filename = os.path.join("data", "Y", 'Y_matrix_params')
+    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params.shelve")
+    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params.shelve")
+    shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params.shelve")
+    save_path_ratio_results = os.path.join("data", "pics", "multi_k_ratio_results.png")
+    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k.png")
+    save_path_regret_results = os.path.join("data", "pics", "multi_k_regret_results.png")
+    save_path_multi_k_results = os.path.join("data", "pics", "multi_k_results.png")
 
     print("\n===== 运行多倍率示例 (带缓存) =====")
     # 使用带缓存的智能函数运行所有求解器
