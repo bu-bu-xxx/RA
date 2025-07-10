@@ -17,23 +17,23 @@ if __name__ == '__main__':
     os.makedirs(os.path.join("data", "pics"), exist_ok=True)
 
     # 文件路径定义
-    param_file = 'params.yml'
-    y_filename = os.path.join("data", "Y", 'Y_matrix_params')
-    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params.shelve")
-    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params.shelve")
-    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params.shelve")
-    shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params.shelve")
-    save_path_ratio_results = os.path.join("data", "pics", "multi_k_ratio_results.png")
-    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k.png")
-    save_path_regret_results = os.path.join("data", "pics", "multi_k_regret_results.png")
-    save_path_multi_k_results = os.path.join("data", "pics", "multi_k_results.png")
+    param_file = 'params5.yml'
+    y_filename = os.path.join("data", "Y", 'Y_matrix_params5')
+    shelve_path_rabbi = os.path.join("data", "shelve", "params_rabbi_params5.shelve")
+    shelve_path_offline = os.path.join("data", "shelve", "params_offline_params5.shelve")
+    shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp_params5.shelve")
+    shelve_path_topklp = os.path.join("data", "shelve", "params_topklp_params5.shelve")
+    save_path_ratio_results = os.path.join("data", "pics", "multi_k_ratio_results5.png")
+    save_path_lp_benchmark = os.path.join("data", "pics", "lp_x_benchmark_ratio_vs_k5.png")
+    save_path_regret_results = os.path.join("data", "pics", "multi_k_regret_results5.png")
+    save_path_multi_k_results = os.path.join("data", "pics", "multi_k_results5.png")
 
     print("\n===== 运行多倍率示例 (带缓存) =====")
     # 使用带缓存的智能函数运行所有求解器
     from main import run_multi_k_with_cache
     solver_classes = [OFFline, NPlusOneLP]
     results = run_multi_k_with_cache(
-        param_file, y_filename, solver_classes, max_concurrency=4,
+        param_file, y_filename, solver_classes, max_concurrency=None,
         shelve_path_rabbi=shelve_path_rabbi,
         shelve_path_offline=shelve_path_offline,
         shelve_path_nplusonelp=shelve_path_nplusonelp,

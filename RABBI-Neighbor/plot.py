@@ -78,6 +78,7 @@ def plot_multi_k_ratio_results(rabbi_params, offline_params, nplus1_params, topk
     if nplus1_params is not None:
         nplus1_rewards = [sum(params.reward_history) for params in nplus1_params]
         nplus1_ratio = [n/o if o != 0 else 0 for n, o in zip(nplus1_rewards, offline_rewards)]
+        # print(len(k_list), len(nplus1_ratio))
         plt.plot(k_list, nplus1_ratio, marker='^', label='NPlusOneLP / OFFline')
     
     if topklp_params is not None:

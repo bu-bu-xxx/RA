@@ -167,27 +167,43 @@ def compute_lp_x_benchmark(params) -> np.ndarray:
     result = np.array(result)
     return result
 
-def save_params_list_to_shelve(params_list, shelve_path):
+def save_params_list_to_shelve(params_list, shelve_path, k_values=None):
     """
     将params_list中的每个params对象直接保存到shelve文件。
-    每个params以params_{idx}为key保存。
+    每个params以params_{int(k_val)}为key保存（如果提供k_values），否则以params_{idx}保存。
     """
     with shelve.open(shelve_path) as db:
         for idx, params in enumerate(params_list):
-            db[f'params_{idx}'] = params
+            if k_values is not None and idx < len(k_values):
+                key = f'params_{int(k_values[idx])}'
+            else:
+                key = f'params_{idx}'
+            db[key] = params
     print(f"已将{len(params_list)}个params对象保存到shelve文件: {shelve_path}")
 
-def load_params_list_from_shelve(shelve_path):
+def load_params_list_from_shelve(shelve_path, k_values=None):
     """
     从指定shelve文件读取所有params数据，返回params_list。
+    如果提供k_values，则按params_{int(k_val)}的键名读取；否则按params_{idx}读取。
     """
     params_list = []
     with shelve.open(shelve_path) as db:
-        # 按key顺序还原
-        keys = sorted([k for k in db.keys() if k.startswith('params_')], key=lambda x: int(x.split('_')[1]))
-        for k in keys:
-            params_data = db[k]
-            params_list.append(params_data)
+        if k_values is not None:
+            # 按k_values顺序读取
+            for k_val in k_values:
+                key = f'params_{int(k_val)}'
+                if key in db:
+                    params_list.append(db[key])
+                else:
+                    print(f"警告: 键 {key} 不存在于shelve文件中")
+                    params_list.append(None)
+        else:
+            # 按原有逻辑读取
+            keys = sorted([k for k in db.keys() if k.startswith('params_')], 
+                         key=lambda x: int(x.split('_')[1]))
+            for k in keys:
+                params_data = db[k]
+                params_list.append(params_data)
     print(f"已从shelve文件{shelve_path}读取{len(params_list)}个params对象")
     return params_list
 
@@ -241,25 +257,28 @@ def run_multi_k_with_cache(param_file, y_filename, solver_classes, max_concurren
             try:
                 with shelve.open(shelve_path, 'r') as db:
                     for k_idx in range(len(k)):
-                        key = f'params_{k_idx}'
+                        k_val = k[k_idx]
+                        key = f'params_{int(k_val)}'
                         if key in db:
                             existing_tasks_count += 1
-                            print(f"[{solver_name}][k={k[k_idx]}] 从缓存跳过")
+                            print(f"[{solver_name}][k={k_val}] 从缓存跳过")
                         else:
                             # 添加到待运行任务
-                            task_args = (len(pending_tasks), k[k_idx], param_file, y_filename, solver_name, k_idx, shelve_path)
+                            task_args = (len(pending_tasks), k_val, param_file, y_filename, solver_name, k_idx, shelve_path)
                             pending_tasks.append(task_args)
-                            print(f"[{solver_name}][k={k[k_idx]}] 添加到待运行队列")
+                            print(f"[{solver_name}][k={k_val}] 添加到待运行队列")
             except Exception as e:
                 print(f"读取{shelve_path}时出错: {e}，将重新运行所有任务")
                 for k_idx in range(len(k)):
-                    task_args = (len(pending_tasks), k[k_idx], param_file, y_filename, solver_name, k_idx, shelve_path)
+                    k_val = k[k_idx]
+                    task_args = (len(pending_tasks), k_val, param_file, y_filename, solver_name, k_idx, shelve_path)
                     pending_tasks.append(task_args)
         else:
             # shelve文件不存在，添加所有k值任务
             print(f"[{solver_name}] shelve文件不存在，添加所有任务到队列")
             for k_idx in range(len(k)):
-                task_args = (len(pending_tasks), k[k_idx], param_file, y_filename, solver_name, k_idx, shelve_path)
+                k_val = k[k_idx]
+                task_args = (len(pending_tasks), k_val, param_file, y_filename, solver_name, k_idx, shelve_path)
                 pending_tasks.append(task_args)
     
     print(f"\n===== 总计 {len(pending_tasks)} 个待运行任务 =====")
@@ -324,7 +343,8 @@ def run_multi_k_with_cache(param_file, y_filename, solver_classes, max_concurren
             try:
                 with shelve.open(shelve_path, 'r') as db:
                     for k_idx in range(len(k)):
-                        key = f'params_{k_idx}'
+                        k_val = k[k_idx]
+                        key = f'params_{int(k_val)}'
                         if key in db:
                             params_list[k_idx] = db[key]
                             completed_count += 1
@@ -372,7 +392,7 @@ def cached_worker(args):
         
         # 立即保存到shelve文件
         with shelve.open(shelve_path) as db:
-            db[f'params_{k_idx}'] = sim.params
+            db[f'params_{int(k_val)}'] = sim.params
         
         # 不在这里打印，让主进程打印
         return (task_idx, sim.params, solver_class_name)
@@ -401,6 +421,10 @@ if __name__ == "__main__":
     params_offline = results['OFFline']
     params_nplusonelp = results['NPlusOneLP']
     params_topklp = results['TopKLP']
+    
+    # 获取k值列表用于保存和加载
+    sim = CustomerChoiceSimulator(param_file, random_seed=42)
+    k = sim.params.k
 
     # 计算x_benchmark
     print("\n===== 计算LP解基准 =====\n")
@@ -418,17 +442,17 @@ if __name__ == "__main__":
     shelve_path_offline = os.path.join("data", "shelve", "params_offline.shelve")
     shelve_path_nplusonelp = os.path.join("data", "shelve", "params_nplusonelp.shelve")
     shelve_path_topklp = os.path.join("data", "shelve", "params_topklp.shelve")
-    save_params_list_to_shelve(params_rabbi, shelve_path_rabbi)
-    save_params_list_to_shelve(params_offline, shelve_path_offline)
-    save_params_list_to_shelve(params_nplusonelp, shelve_path_nplusonelp)
-    save_params_list_to_shelve(params_topklp, shelve_path_topklp)
+    save_params_list_to_shelve(params_rabbi, shelve_path_rabbi, k)
+    save_params_list_to_shelve(params_offline, shelve_path_offline, k)
+    save_params_list_to_shelve(params_nplusonelp, shelve_path_nplusonelp, k)
+    save_params_list_to_shelve(params_topklp, shelve_path_topklp, k)
 
     # 从shelve文件加载params_list示例
     print("\n===== 从shelve文件加载params_list示例 =====")
-    loaded_params_rabbi = load_params_list_from_shelve(shelve_path_rabbi)
-    loaded_params_offline = load_params_list_from_shelve(shelve_path_offline)
-    loaded_params_nplusonelp = load_params_list_from_shelve(shelve_path_nplusonelp)
-    loaded_params_topklp = load_params_list_from_shelve(shelve_path_topklp)
+    loaded_params_rabbi = load_params_list_from_shelve(shelve_path_rabbi, k)
+    loaded_params_offline = load_params_list_from_shelve(shelve_path_offline, k)
+    loaded_params_nplusonelp = load_params_list_from_shelve(shelve_path_nplusonelp, k)
+    loaded_params_topklp = load_params_list_from_shelve(shelve_path_topklp, k)
     print(f"[Loaded RABBI] params_list length: {len(loaded_params_rabbi)}")
     print(f"[Loaded OFFline] params_list length: {len(loaded_params_offline)}")
     print(f"[Loaded NPlusOneLP] params_list length: {len(loaded_params_nplusonelp)}")
