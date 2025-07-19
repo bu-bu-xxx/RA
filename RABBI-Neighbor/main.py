@@ -170,14 +170,30 @@ def compute_lp_x_benchmark(params) -> np.ndarray:
 def save_params_list_to_shelve(params_list, shelve_path, k_values=None):
     """
     将params_list中的每个params对象直接保存到shelve文件。
-    每个params以params_{int(k_val)}为key保存（如果提供k_values），否则以params_{idx}保存。
+    每个params以params_{int(k_val)}为key保存（如果提供k_values），否则从params对象获取k值或使用idx。
     """
     with shelve.open(shelve_path) as db:
         for idx, params in enumerate(params_list):
             if k_values is not None and idx < len(k_values):
                 key = f'params_{int(k_values[idx])}'
             else:
-                key = f'params_{idx}'
+                # 尝试从params对象获取k值，如果失败则使用idx
+                try:
+                    # 假设params对象有k属性或者可以通过某种方式获取k值
+                    # 这里需要根据实际的params对象结构来调整
+                    if hasattr(params, 'k') and hasattr(params.k, '__iter__'):
+                        # 如果k是列表，使用当前索引对应的k值
+                        k_val = params.k[idx] if idx < len(params.k) else idx + 1
+                    elif hasattr(params, 'k'):
+                        # 如果k是单一值
+                        k_val = params.k
+                    else:
+                        # 如果没有k属性，使用idx+1作为默认值
+                        k_val = idx + 1
+                    key = f'params_{int(k_val)}'
+                except:
+                    # 如果获取k值失败，使用idx+1
+                    key = f'params_{idx + 1}'
             db[key] = params
     print(f"已将{len(params_list)}个params对象保存到shelve文件: {shelve_path}")
 
