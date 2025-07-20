@@ -47,7 +47,7 @@ class LPBasedPolicy:
         # 约束3: 0 <= x <= T-t
         bounds = [(0, T - t) for _ in range(m)]
 
-        res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+        res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs', options={'maxiter': 10000})
         if res.success:
             return res.x
         else:
@@ -191,8 +191,8 @@ class NPlusOneLP(LPBasedPolicy):
         
         NPlusOneLP._debug_print(debug_tag, debug, "bounds:", bounds)
         NPlusOneLP._debug_print(debug_tag, debug, "x0:", x0)
-        # 求解连续松弛问题
-        res = minimize(objective, x0, bounds=bounds, constraints=cons)
+        # 求解连续松弛问题，增加最大迭代次数限制
+        res = minimize(objective, x0, bounds=bounds, constraints=cons, options={'maxiter': 10000})
         
         NPlusOneLP._debug_print(debug_tag, debug, "res.x:", res.x, "shape:", np.shape(res.x))
         NPlusOneLP._debug_print(debug_tag, debug, "res.success:", res.success, "message:", res.message)
@@ -355,8 +355,8 @@ class NPlusOneLP(LPBasedPolicy):
         NPlusOneLP._debug_print(debug_tag, debug, "A_ub:", A_ub, "shape:", np.shape(A_ub))
         NPlusOneLP._debug_print(debug_tag, debug, "b_ub:", b, "shape:", np.shape(b))
         NPlusOneLP._debug_print(debug_tag, debug, "A_eq:", A_eq, "b_eq:", b_eq)
-        # 求解线性规划
-        res = linprog(c, A_ub=A_ub, b_ub=b, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+        # 求解线性规划，增加最大迭代次数限制
+        res = linprog(c, A_ub=A_ub, b_ub=b, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs', options={'maxiter': 10000})
         
         NPlusOneLP._debug_print(debug_tag, debug, "res.x:", res.x if res.success else None, "shape:", np.shape(res.x) if res.success else None)
         NPlusOneLP._debug_print(debug_tag, debug, "res.success:", res.success, "message:", res.message)
