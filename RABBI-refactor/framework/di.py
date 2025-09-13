@@ -14,6 +14,12 @@ def _ensure_neighbor_on_path():
     """
     here = Path(__file__).resolve()
     repo_root = here.parents[2] if len(here.parents) >= 3 else here.parent
+    # Prefer local refactor root first
+    refactor_root = repo_root / "RABBI-refactor"
+    if refactor_root.is_dir():
+        s = str(refactor_root)
+        if s not in sys.path:
+            sys.path.insert(0, s)
     neighbor = repo_root / "RABBI-Neighbor"
     if neighbor.is_dir():
         str_neighbor = str(neighbor)
