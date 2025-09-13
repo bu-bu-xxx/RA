@@ -48,11 +48,16 @@ def main():
     p_cache.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
     p_cache.add_argument("--save-dir", default="RABBI-refactor/data/pics")
 
+    p_clear = sub.add_parser("clear-cache")
+    p_clear.add_argument("--solvers", nargs="*", default=[], help="Solvers to clear; default clears all known")
+    p_clear.add_argument("--shelve-dir", default="RABBI-refactor/data/shelve")
+    p_clear.add_argument("--preview-clear", "--dry-run", "--preview", action="store_true", dest="preview_clear",
+                         help="List files that would be removed without deleting them")
+
     args = parser.parse_args()
 
     if args.cmd == "single":
-        res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed,
-                         with_offline_Q=(args.solver == "OFFline"))
+        res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed)
         print(f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}")
     elif args.cmd == "multi":
         # Dynamically resolve solver classes by name from solver module
@@ -80,6 +85,33 @@ def main():
         if args.plots:
             viz = Visualizer()
             viz.generate_plots(results, args.plots, args.save_dir)
+    elif args.cmd == "clear-cache":
+        os.makedirs(args.shelve_dir, exist_ok=True)
+        # Accept arbitrary solver names; if none provided, use standard set
+        solvers = args.solvers or ["RABBI", "OFFline", "NPlusOneLP", "TopKLP"]
+        targets = []
+        for name in solvers:
+            base = os.path.join(args.shelve_dir, f"params_{name.lower()}.shelve")
+            # Shelve may create multiple files depending on backend; remove known suffixes
+            for suffix in ("", ".db", ".dat", ".dir", ".bak"):  # tolerate variants
+                path = base + suffix
+                if os.path.exists(path):
+                    targets.append(path)
+        if args.preview_clear:
+            print("Would remove:")
+            for p in targets:
+                print(p)
+        else:
+            removed = []
+            for p in targets:
+                try:
+                    os.remove(p)
+                    removed.append(p)
+                except OSError:
+                    pass
+            print("Removed:")
+            for p in removed:
+                print(p)
 
 
 if __name__ == "__main__":

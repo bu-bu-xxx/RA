@@ -16,7 +16,7 @@ It does not rename or change any function/class/variable in the original logic. 
   - `viz.py`: Visualization with inlined plotting implementations.
 - `cli.py`: Simple CLI for single/multi/cache runs with optional plots.
 - `examples/`: Quick examples.
-- Copied originals: `solver.py`, `customer.py`, `env.py`, `params*.yml`.
+- Copied originals: `solver.py`, `customer.py`, `env.py`, `read_params.py`, `params*.yml`.
 
 Notes:
 - Plotting is now handled directly in `framework/viz.py`; the legacy `plot.py` has been reduced to a thin shim and can be removed if not used externally.
@@ -80,6 +80,38 @@ python3 RABBI-refactor/examples/run_multi_with_plots.py
 ## Notes
 - The framework adds the local refactor folder and (if needed) the old neighbor folder to `sys.path` to import original modules.
 - The original files were copied here so you can delete the old project once you validate this folder runs end-to-end.
+
+### Cache compatibility
+- Shelve files created by very old code may embed pickles importing modules that no longer exist (e.g., `read_params`).
+- The runner now ignores unreadable cache entries and recomputes missing results automatically, then writes back compatible entries.
+- To force a clean state, clear cache files:
+
+```bash
+python3 -m RABBI-refactor.cli clear-cache --shelve-dir RABBI-refactor/data/shelve
+# Or specific solvers
+python3 -m RABBI-refactor.cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refactor/data/shelve
+```
+
+### Clear-cache preview (no deletion)
+- Use the preview flag to see what would be removed without deleting files.
+- Flags: `--preview-clear` (primary), aliases: `--dry-run`, `--preview`.
+
+Examples:
+
+```bash
+# Preview all cache files in default directory
+python3 -m RABBI-refactor.cli clear-cache --preview-clear
+
+# Preview for specific solvers only
+python3 -m RABBI-refactor.cli clear-cache --solvers OFFline NPlusOneLP --preview-clear
+
+# Preview with a custom cache directory
+python3 -m RABBI-refactor.cli clear-cache --shelve-dir RABBI-refactor/data/shelve --preview-clear
+```
+
+Output:
+- Preview prints `Would remove:` followed by the matching shelve files (supports backends creating `.db/.dat/.dir/.bak`).
+- Without preview, it prints `Removed:` and deletes those files.
 
 ## Smoke Test (All Solvers)
 

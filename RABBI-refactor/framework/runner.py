@@ -29,7 +29,7 @@ def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
 
 
 def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed: Optional[int] = None,
-               with_offline_Q: bool = False, k_val: Optional[float] = None) -> RunResult:
+               k_val: Optional[float] = None) -> RunResult:
     container = Container(param_file, seed=seed, y_prefix=y_prefix)
     sim = container.make_sim()
     if k_val is not None:
@@ -128,7 +128,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                         index_map[task_ptr] = (solver_name, k_idx)
                         pending_tasks.append((task_ptr, k_val, param_file, y_prefix, solver_name, seed))
                         task_ptr += 1
-        except Exception:  # noqa: BLE001 - keep broad to avoid failing cache path
+        except (OSError, RuntimeError):
             # if shelve broken, schedule all
             for k_idx, k_val in enumerate(k_values):
                 index_map[task_ptr] = (solver_name, k_idx)
@@ -151,7 +151,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                         with shelve.open(shelve_path, flag='c') as db:
                             key = f"params_{int(k_values[k_idx])}"
                             db[key] = params
-                    except Exception:  # noqa: BLE001 - cache write is best-effort
+                    except (OSError, RuntimeError):
                         pass
 
     # fill from cache for existing ones
@@ -164,8 +164,39 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                 for k_idx, k_val in enumerate(k_values):
                     key = f"params_{int(k_val)}"
                     if results_dict[solver_name][k_idx] is None and key in db:
-                        results_dict[solver_name][k_idx] = db[key]
-        except Exception:  # noqa: BLE001 - cache read is best-effort
+                        try:
+                            results_dict[solver_name][k_idx] = db[key]
+                        except (OSError, RuntimeError, KeyError, ModuleNotFoundError, AttributeError):
+                            # Leave as None to be recomputed in fallback below
+                            pass
+        except (OSError, RuntimeError, KeyError):
             pass
+
+    # Fallback: if any entries remain None, schedule and run those tasks now
+    missing_tasks: List[Tuple[int, float, str, str, str, Optional[int]]] = []
+    missing_index_map: Dict[int, Tuple[str, int]] = {}
+    miss_ptr = 0
+    for solver_name in solver_names:
+        for k_idx, k_val in enumerate(k_values):
+            if results_dict[solver_name][k_idx] is None:
+                missing_index_map[miss_ptr] = (solver_name, k_idx)
+                missing_tasks.append((miss_ptr, float(k_val), param_file, y_prefix, solver_name, seed))
+                miss_ptr += 1
+
+    if missing_tasks:
+        max_workers = max_concurrency or os.cpu_count()
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for task_idx, params, solver_name in executor.map(_universal_worker, missing_tasks):
+                solver_name_mapped, k_idx = missing_index_map[task_idx]
+                results_dict[solver_name_mapped][k_idx] = params
+                # write-through cache
+                shelve_path = shelve_paths.get(solver_name_mapped)
+                if shelve_path:
+                    try:
+                        with shelve.open(shelve_path, flag='c') as db:
+                            key = f"params_{int(k_values[k_idx])}"
+                            db[key] = params
+                    except (OSError, RuntimeError):
+                        pass
 
     return results_dict
