@@ -1,0 +1,27 @@
+product_number: 2
+resource_number: 1
+resource_matrix:
+  - [1]
+  - [1]
+price_set_matrix:
+  - [5, 10]
+  - [5, 10]
+horizon: 5
+budget: [3]
+scaling_list: [1, 2]
+topk: 2
+demand_model: "MNL"
+
+MNL:
+  d: [5.0, 6.0]
+  mu: 5.0
+  u0: 0
+  gamma: 1.0
+
+Linear:
+  psi: [1, 1]
+  theta:
+    - [-0.1, -0.1]
+    - [-0.1, -0.1]
+
+tolerance: 1e-4
