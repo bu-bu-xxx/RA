@@ -1,3 +1,12 @@
+"""
+Smoke test: single-run sanity check.
+
+- Ensures DI/runner wiring works end-to-end for a minimal config.
+- Runs `run_single` with solver `RABBI` on `tests/params_min.yml` (seed=123).
+- Validates: non-negative `total_reward` and a returned `params` object.
+- Note: `OFFline` needs precomputed Q; here we use `RABBI` for a fast path.
+"""
+
 import os
 import sys
 

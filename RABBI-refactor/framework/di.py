@@ -83,6 +83,10 @@ class Container:
             sim.load_Y(y_file)
         else:
             sim.generate_Y_matrix()
+            # Ensure directory exists before saving
+            y_dir = os.path.dirname(y_file)
+            if y_dir:
+                os.makedirs(y_dir, exist_ok=True)
             sim.save_Y(y_file)
 
     def make_solver(self, name: str, sim):

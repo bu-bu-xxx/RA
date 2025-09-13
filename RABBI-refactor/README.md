@@ -76,3 +76,35 @@ python3 RABBI-refactor/examples/run_multi_with_plots.py
 ## Notes
 - The framework adds the local refactor folder and (if needed) the old neighbor folder to `sys.path` to import original modules.
 - The original files were copied here so you can delete the old project once you validate this folder runs end-to-end.
+
+## Smoke Test (All Solvers)
+
+Run a comprehensive smoke test covering all solvers (RABBI, OFFline, NPlusOneLP, TopKLP), including plot generation and cache:
+
+```bash
+# Ensure required directories exist
+mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/pics RABBI-refactor/data/shelve
+
+# Multi-k with all solvers and plots
+python3 -m RABBI-refactor.cli multi \
+  --param RABBI-refactor/tests/params_min.yml \
+  --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
+  --solvers RABBI OFFline NPlusOneLP TopKLP \
+  --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
+  --save-dir RABBI-refactor/data/pics
+
+# Cache mode to create shelve artifacts
+python3 -m RABBI-refactor.cli cache \
+  --param RABBI-refactor/tests/params_min.yml \
+  --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
+  --solvers RABBI OFFline NPlusOneLP TopKLP \
+  --shelve-dir RABBI-refactor/data/shelve \
+  --plots multi_k_results \
+  --save-dir RABBI-refactor/data/pics
+
+# Expected outputs
+ls -1 RABBI-refactor/data/pics
+ls -1 RABBI-refactor/data/shelve
+```
+
+This mirrors what the tests do in `tests/test_cli_and_multi_smoke.py`.

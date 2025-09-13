@@ -21,9 +21,8 @@ def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
     sim.params.B = sim.params.B * k_val
     sim.params.T = int(sim.params.T * k_val)
     container.prepare_Y(sim, k_val=k_val)
-    # offline Q if needed
-    if solver_name == "OFFline":
-        sim.compute_offline_Q()
+    # compute offline Q for all solvers to enable LP benchmark and parity with original main
+    sim.compute_offline_Q()
     solver = container.make_solver(solver_name, sim)
     solver.run()
     return (task_idx, sim.params, solver_name)
@@ -37,8 +36,8 @@ def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed:
         sim.params.B = sim.params.B * k_val
         sim.params.T = int(sim.params.T * k_val)
     container.prepare_Y(sim, k_val=k_val)
-    if with_offline_Q:
-        sim.compute_offline_Q()
+    # For compatibility with compute_lp_x_benchmark, compute Q regardless of solver
+    sim.compute_offline_Q()
     solver = container.make_solver(solver_name, sim)
     solver.run()
     total = compute_total_reward(sim.params)
