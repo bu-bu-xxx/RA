@@ -13,10 +13,14 @@ It does not rename or change any function/class/variable in the original logic. 
   - `di.py`: Policy registry and container to build sims/solvers.
   - `runner.py`: Orchestration for single/multi-k runs (with cache).
   - `results.py`: Standard result objects and metrics wrappers.
-  - `viz.py`: Visualization adapter delegating to existing `plot.py`.
+  - `viz.py`: Visualization with inlined plotting implementations.
 - `cli.py`: Simple CLI for single/multi/cache runs with optional plots.
 - `examples/`: Quick examples.
-- Copied originals: `solver.py`, `customer.py`, `env.py`, `read_params.py`, `main.py`, `plot.py`, `plot_offline_nplus1.py`, `params*.yml`.
+- Copied originals: `solver.py`, `customer.py`, `env.py`, `params*.yml`.
+
+Notes:
+- Plotting is now handled directly in `framework/viz.py`; the legacy `plot.py` has been reduced to a thin shim and can be removed if not used externally.
+- Legacy `main.py` is kept only as a wrapper for compatibility; new code should use `framework.runner` and `framework.results`.
 
 ## Quick Start
 

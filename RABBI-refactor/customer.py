@@ -48,31 +48,13 @@ class CustomerChoiceSimulator(DynamicPricingEnv):
         return Q
 
     def save_Y(self, filename):
+        dirname = os.path.dirname(filename)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
         np.save(filename, self.params.Y)
 
     def load_Y(self, filename):
         self.params.Y = np.load(filename)
         return self.params.Y
 
-# 示例用法
-if __name__ == "__main__":
-    sim = CustomerChoiceSimulator('params.yml', random_seed=42)
-    print("p: shape:", sim.params.p.shape)
-    print("p示例：", sim.params.p)
-    Y = sim.generate_Y_matrix()
-    print("Y矩阵 shape:", Y.shape)
-    print("示例：第0个时间步的选择\n", Y[0])
-    print("示例：第1个时间步的选择\n", Y[1])
-    print("示例：第19个时间步的选择\n", Y[19])
-    Q = sim.compute_offline_Q()
-    print("示例：Q矩阵 shape:", Q.shape)
-    print("示例：第0个时间步的Q矩阵\n", Q[0])
-    print("示例：第1个时间步的Q矩阵\n", Q[1])
-    print("示例：第19个时间步的Q矩阵\n", Q[19])
-    # 保存和读取Y示例
-    data_dir = os.path.join(os.getcwd(), "data", "Y")
-    os.makedirs(data_dir, exist_ok=True)
-    Y_path = os.path.join(data_dir, "Y_matrix_debug.npy")
-    sim.save_Y(Y_path)
-    Y_loaded = sim.load_Y(Y_path)
-    print("读取后的Y矩阵 shape:", Y_loaded.shape)
+# No top-level script code; this module is library-only.
