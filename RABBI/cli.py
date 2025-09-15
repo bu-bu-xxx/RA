@@ -1,6 +1,6 @@
 """Thin CLI shim. Usage:
     python -m cli <subcommand> ...
-Run from inside the RABBI-refactor folder.
+Run from inside the RABBI folder.
 """
 import os
 import sys

@@ -10,7 +10,7 @@ Smoke test: single-run sanity check.
 import os
 import sys
 
-# Ensure RABBI-refactor is on sys.path so 'framework' can be imported
+# Ensure RABBI is on sys.path so 'framework' can be imported
 THIS_DIR = os.path.dirname(__file__)
 REFAC_ROOT = os.path.dirname(THIS_DIR)
 if REFAC_ROOT not in sys.path:

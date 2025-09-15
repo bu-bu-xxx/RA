@@ -9,9 +9,9 @@ Includes three parts:
 2) CLI multi + plots: runs `python -m cli multi` with all
     solvers, generates plots (multi_k_results, multi_k_ratio, multi_k_regret,
     lp_x_benchmark_ratio) and asserts the expected PNG files exist under
-    `RABBI-refactor/data/pics`.
+    `RABBI/data/pics`.
 3) CLI cache: runs `python -m cli cache` with all solvers and
-    asserts shelve artifacts exist under `RABBI-refactor/data/shelve` (accepts
+    asserts shelve artifacts exist under `RABBI/data/shelve` (accepts
     varying dbm extensions).
 """
 
@@ -19,7 +19,7 @@ import os
 import sys
 import subprocess
 
-# Ensure RABBI-refactor is on sys.path so 'framework' and 'solver' can be imported
+# Ensure RABBI is on sys.path so 'framework' and 'solver' can be imported
 THIS_DIR = os.path.dirname(__file__)
 REFAC_ROOT = os.path.dirname(THIS_DIR)
 REPO_ROOT = os.path.dirname(REFAC_ROOT)

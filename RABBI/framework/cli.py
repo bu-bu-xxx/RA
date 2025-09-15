@@ -1,7 +1,7 @@
-"""Optional CLI entry to run experiments in RABBI-refactor without touching external modules.
-Usage examples (from repo root with PYTHONPATH including RABBI-refactor or using -m within that folder):
-    python -m framework.cli single --param RABBI-refactor/params/params5.yml --solver OFFline --y-prefix RABBI-refactor/data/Y/Y_matrix_params5
-    python -m framework.cli multi  --param RABBI-refactor/params/params5.yml --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 --solvers OFFline NPlusOneLP
+"""Optional CLI entry to run experiments in RABBI without touching external modules.
+Usage examples (run from inside the RABBI folder):
+    python -m cli single --param params/params5.yml --solver OFFline --y-prefix data/Y/Y_matrix_params5
+    python -m cli multi  --param params/params5.yml --y-prefix data/Y/Y_matrix_params5 --solvers OFFline NPlusOneLP
 """
 import argparse
 import os
@@ -16,7 +16,7 @@ SOLVER_CHOICES = PolicyRegistry.available_names()
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="rabbi-refactor",
+        prog="rabbi",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -41,7 +41,7 @@ def main():
     p_multi.add_argument("--max-concurrency", type=int, default=None)
     p_multi.add_argument("--seed", type=int, default=42)
     p_multi.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
-    p_multi.add_argument("--save-dir", default="RABBI-refactor/data/pics")
+    p_multi.add_argument("--save-dir", default="data/pics")
     p_multi.add_argument("--save-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
 
     p_cache = sub.add_parser("cache")
@@ -57,9 +57,9 @@ def main():
     )
     p_cache.add_argument("--max-concurrency", type=int, default=None)
     p_cache.add_argument("--seed", type=int, default=42)
-    p_cache.add_argument("--shelve-dir", default="RABBI-refactor/data/shelve")
+    p_cache.add_argument("--shelve-dir", default="data/shelve")
     p_cache.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
-    p_cache.add_argument("--save-dir", default="RABBI-refactor/data/pics")
+    p_cache.add_argument("--save-dir", default="data/pics")
     p_cache.add_argument("--save-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
 
     p_clear = sub.add_parser("clear-cache")
@@ -71,7 +71,7 @@ def main():
         metavar="SOLVER",
         help=f"Solvers to clear; default clears all known. Available: {', '.join(SOLVER_CHOICES)}",
     )
-    p_clear.add_argument("--shelve-dir", default="RABBI-refactor/data/shelve")
+    p_clear.add_argument("--shelve-dir", default="data/shelve")
     p_clear.add_argument("--preview-clear", "--dry-run", "--preview", action="store_true", dest="preview_clear",
                          help="List files that would be removed without deleting them")
 

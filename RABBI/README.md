@@ -1,4 +1,4 @@
-# RABBI Refactor (Non-invasive framework)
+# RABBI (Non-invasive framework)
 
 This folder provides a minimal, non-invasive framework around the existing code to improve:
 - Dependency injection and composability
@@ -30,16 +30,16 @@ Notes:
 Create folders for data and pics (if not present):
 
 ```bash
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
+# Run from inside the RABBI folder
+cd RABBI
 mkdir -p data/Y data/shelve data/pics
 ```
 
 ### Single run
 
 ```bash
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
+# Run from inside the RABBI folder
+cd RABBI
 python3 -m cli single \
   --param tests/params_min.yml \
   --solver RABBI \
@@ -49,8 +49,8 @@ python3 -m cli single \
 ### Multi-k run
 
 ```bash
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
+# Run from inside the RABBI folder
+cd RABBI
 python3 -m cli multi \
   --param params/params5.yml \
   --y-prefix data/Y/Y_matrix_params5 \
@@ -63,8 +63,8 @@ python3 -m cli multi \
 ### Multi-k with cache
 
 ```bash
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
+# Run from inside the RABBI folder
+cd RABBI
 python3 -m cli cache \
   --param params/params5.yml \
   --y-prefix data/Y/Y_matrix_params5 \
@@ -81,8 +81,8 @@ python3 -m cli cache \
 The `--solvers` argument validates and shows available choices in `-h`:
 
 ```bash
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
+# Run from inside the RABBI folder
+cd RABBI
 python3 -m cli multi -h
 ```
 
@@ -116,7 +116,7 @@ This makes long multi-k runs observable in real time without extra flags.
 See `examples/run_multi_with_plots.py`:
 
 ```bash
-python3 RABBI-refactor/examples/run_multi_with_plots.py
+python3 examples/run_multi_with_plots.py
 ```
 
 ## Notes
@@ -127,11 +127,11 @@ python3 RABBI-refactor/examples/run_multi_with_plots.py
 - To force a clean state, clear cache files:
 
 ```bash
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
-python3 -m cli clear-cache --shelve-dir RABBI-refactor/data/shelve
+# Run from inside the RABBI folder
+cd RABBI
+python3 -m cli clear-cache --shelve-dir RABBI/data/shelve
 # Or specific solvers
-python3 -m cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refactor/data/shelve
+python3 -m cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir data/shelve
 ```
 
 ### Clear-cache preview (no deletion)
@@ -141,8 +141,8 @@ python3 -m cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refac
 Examples:
 
 ```bash
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
+# Run from inside the RABBI folder
+cd RABBI
 # Preview all cache files in default directory
 python3 -m cli clear-cache --preview-clear
 
@@ -150,7 +150,7 @@ python3 -m cli clear-cache --preview-clear
 python3 -m cli clear-cache --solvers OFFline NPlusOneLP --preview-clear
 
 # Preview with a custom cache directory
-python3 -m cli clear-cache --shelve-dir RABBI-refactor/data/shelve --preview-clear
+python3 -m cli clear-cache --shelve-dir data/shelve --preview-clear
 ```
 
 Output:
