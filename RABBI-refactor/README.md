@@ -30,7 +30,9 @@ Notes:
 Create folders for data and pics (if not present):
 
 ```bash
-mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/shelve RABBI-refactor/data/pics
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
+mkdir -p data/Y data/shelve data/pics
 ```
 
 ### Single run
@@ -39,7 +41,7 @@ mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/shelve RABBI-refactor/data/pi
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
 python3 -m cli single \
-  --param RABBI-refactor/tests/params_min.yml \
+  --param tests/params_min.yml \
   --solver RABBI \
   --seed 123
 ```
@@ -50,11 +52,11 @@ python3 -m cli single \
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
 python3 -m cli multi \
-  --param RABBI-refactor/params/params5.yml \
-  --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 \
+  --param params/params5.yml \
+  --y-prefix data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
-  --save-dir RABBI-refactor/data/pics \
+  --save-dir data/pics \
   --save-prefix exp1_
 ```
 
@@ -64,13 +66,13 @@ python3 -m cli multi \
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
 python3 -m cli cache \
-  --param RABBI-refactor/params/params5.yml \
-  --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 \
+  --param params/params5.yml \
+  --y-prefix data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP \
   --max-concurrency 4 \
-  --shelve-dir RABBI-refactor/data/shelve \
+  --shelve-dir data/shelve \
   --plots multi_k_results multi_k_ratio \
-  --save-dir RABBI-refactor/data/pics \
+  --save-dir data/pics \
   --save-prefix exp1_
 ```
 
@@ -118,7 +120,7 @@ python3 RABBI-refactor/examples/run_multi_with_plots.py
 ```
 
 ## Notes
-- The framework modules are importable via `python -m framework.cli` from inside this folder. Programmatic usage can `import framework.runner` etc.
+- The CLI is available via `python -m cli` from inside this folder. Programmatic usage can `import framework.runner` etc.
 
 ### Cache compatibility
 - Shelve files created by older code may embed pickles importing modules that no longer exist. The runner ignores unreadable cache entries and recomputes missing results automatically, then writes back compatible entries.
@@ -129,7 +131,7 @@ python3 RABBI-refactor/examples/run_multi_with_plots.py
 cd RABBI-refactor
 python3 -m cli clear-cache --shelve-dir RABBI-refactor/data/shelve
 # Or specific solvers
-python3 -m framework.cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refactor/data/shelve
+python3 -m cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refactor/data/shelve
 ```
 
 ### Clear-cache preview (no deletion)
@@ -161,31 +163,28 @@ Run a comprehensive smoke test covering all solvers (RABBI, OFFline, NPlusOneLP,
 
 ```bash
 # Ensure required directories exist
-mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/pics RABBI-refactor/data/shelve
-
-# Run from inside the RABBI-refactor folder
-cd RABBI-refactor
+mkdir -p data/Y data/pics data/shelve
 
 # Multi-k with all solvers and plots
 python3 -m cli multi \
-  --param RABBI-refactor/tests/params_min.yml \
-  --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
+  --param tests/params_min.yml \
+  --y-prefix data/Y/Y_matrix_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
-  --save-dir RABBI-refactor/data/pics
+  --save-dir data/pics
 
 # Cache mode to create shelve artifacts
 python3 -m cli cache \
-  --param RABBI-refactor/tests/params_min.yml \
-  --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
+  --param tests/params_min.yml \
+  --y-prefix data/Y/Y_matrix_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP \
-  --shelve-dir RABBI-refactor/data/shelve \
+  --shelve-dir data/shelve \
   --plots multi_k_results \
-  --save-dir RABBI-refactor/data/pics
+  --save-dir data/pics
 
 # Expected outputs
-ls -1 RABBI-refactor/data/pics
-ls -1 RABBI-refactor/data/shelve
+ls -1 data/pics
+ls -1 data/shelve
 ```
 
 This mirrors what the tests do in `tests/test_cli_and_multi_smoke.py`.

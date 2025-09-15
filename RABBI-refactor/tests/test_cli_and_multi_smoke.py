@@ -6,11 +6,11 @@ Includes three parts:
     (RABBI, OFFline, NPlusOneLP, TopKLP) on `tests/params_min.yml` (seed=42,
     max_concurrency=2) and asserts each solver/k returns params with a non-empty
     reward_history and non-negative total reward.
-2) CLI multi + plots: runs `python -m framework.cli multi` with all
+2) CLI multi + plots: runs `python -m cli multi` with all
     solvers, generates plots (multi_k_results, multi_k_ratio, multi_k_regret,
     lp_x_benchmark_ratio) and asserts the expected PNG files exist under
     `RABBI-refactor/data/pics`.
-3) CLI cache: runs `python -m framework.cli cache` with all solvers and
+3) CLI cache: runs `python -m cli cache` with all solvers and
     asserts shelve artifacts exist under `RABBI-refactor/data/shelve` (accepts
     varying dbm extensions).
 """
