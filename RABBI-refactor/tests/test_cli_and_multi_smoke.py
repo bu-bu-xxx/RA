@@ -66,7 +66,7 @@ def test_cli_multi_plots_and_cache_smoke():
     cmd_multi = [
         sys.executable,
         "-m",
-        "framework.cli",
+        "cli",
         "multi",
         "--param",
         param,
@@ -103,7 +103,7 @@ def test_cli_multi_plots_and_cache_smoke():
     cmd_cache = [
         sys.executable,
         "-m",
-        "framework.cli",
+        "cli",
         "cache",
         "--param",
         param,

@@ -5,22 +5,25 @@ This folder provides a minimal, non-invasive framework around the existing code 
 - Standardized data passing and results
 - Testability and runnable CLI
 
-It does not rename or change any function/class/variable in the original logic. Core files from the old project have been copied here so the folder is self-contained.
+It does not rename or change any function/class/variable in the original logic. Core logic is implemented under `framework/` so this folder is self-contained.
 
 ## Layout
 
 - `framework/`
+  - `cli.py`: CLI for single/multi/cache runs with optional plots.
   - `di.py`: Policy registry and container to build sims/solvers.
   - `runner.py`: Orchestration for single/multi-k runs (with cache).
   - `results.py`: Standard result objects and metrics wrappers.
-  - `viz.py`: Visualization with inlined plotting implementations.
-- `framework/cli.py`: CLI for single/multi/cache runs with optional plots.
+  - `viz.py`: Visualization for multi-policy results.
+  - `solver.py`: Policy implementations (RABBI, OFFline, NPlusOneLP, TopKLP).
+  - `customer.py`: Customer simulator built on the environment.
+  - `env.py`: Parameter loading and environment dynamics.
 - `examples/`: Quick examples.
-- Copied originals: `solver.py`, `customer.py`, `env.py`, `read_params.py`, `params*.yml`.
+- `params/`: YAML configs (moved from top-level into this folder).
 
 Notes:
-- Plotting is now handled directly in `framework/viz.py`; the legacy `plot.py` has been reduced to a thin shim and can be removed if not used externally.
-- Legacy `main.py` is kept only as a wrapper for compatibility; new code should use `framework.runner` and `framework.results`.
+- Plotting is handled directly in `framework/viz.py`.
+- Legacy top-level modules (`customer.py`, `env.py`, `solver.py`, `cli.py`) have been removed in favor of the `framework/` package.
 
 ## Quick Start
 
@@ -35,7 +38,7 @@ mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/shelve RABBI-refactor/data/pi
 ```bash
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
-python3 -m framework.cli single \
+python3 -m cli single \
   --param RABBI-refactor/tests/params_min.yml \
   --solver RABBI \
   --seed 123
@@ -46,7 +49,7 @@ python3 -m framework.cli single \
 ```bash
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
-python3 -m framework.cli multi \
+python3 -m cli multi \
   --param RABBI-refactor/params/params5.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP \
@@ -60,7 +63,7 @@ python3 -m framework.cli multi \
 ```bash
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
-python3 -m framework.cli cache \
+python3 -m cli cache \
   --param RABBI-refactor/params/params5.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP \
@@ -73,20 +76,15 @@ python3 -m framework.cli cache \
 
 ### Available solvers and CLI help
 
-The `--solvers` argument now validates and shows available choices in `-h`:
+The `--solvers` argument validates and shows available choices in `-h`:
 
 ```bash
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
-python3 -m framework.cli multi -h
+python3 -m cli multi -h
 ```
 
-Available solver names:
-
-- RABBI
-- OFFline
-- NPlusOneLP
-- TopKLP
+Available solver names: RABBI, OFFline, NPlusOneLP, TopKLP
 
 ### Plot filename prefix
 
@@ -120,18 +118,16 @@ python3 RABBI-refactor/examples/run_multi_with_plots.py
 ```
 
 ## Notes
-- The framework adds the local refactor folder and (if needed) the old neighbor folder to `sys.path` to import original modules.
-- The original files were copied here so you can delete the old project once you validate this folder runs end-to-end.
+- The framework modules are importable via `python -m framework.cli` from inside this folder. Programmatic usage can `import framework.runner` etc.
 
 ### Cache compatibility
-- Shelve files created by very old code may embed pickles importing modules that no longer exist (e.g., `read_params`).
-- The runner now ignores unreadable cache entries and recomputes missing results automatically, then writes back compatible entries.
+- Shelve files created by older code may embed pickles importing modules that no longer exist. The runner ignores unreadable cache entries and recomputes missing results automatically, then writes back compatible entries.
 - To force a clean state, clear cache files:
 
 ```bash
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
-python3 -m framework.cli clear-cache --shelve-dir RABBI-refactor/data/shelve
+python3 -m cli clear-cache --shelve-dir RABBI-refactor/data/shelve
 # Or specific solvers
 python3 -m framework.cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refactor/data/shelve
 ```
@@ -146,13 +142,13 @@ Examples:
 # Run from inside the RABBI-refactor folder
 cd RABBI-refactor
 # Preview all cache files in default directory
-python3 -m framework.cli clear-cache --preview-clear
+python3 -m cli clear-cache --preview-clear
 
 # Preview for specific solvers only
-python3 -m framework.cli clear-cache --solvers OFFline NPlusOneLP --preview-clear
+python3 -m cli clear-cache --solvers OFFline NPlusOneLP --preview-clear
 
 # Preview with a custom cache directory
-python3 -m framework.cli clear-cache --shelve-dir RABBI-refactor/data/shelve --preview-clear
+python3 -m cli clear-cache --shelve-dir RABBI-refactor/data/shelve --preview-clear
 ```
 
 Output:
@@ -171,7 +167,7 @@ mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/pics RABBI-refactor/data/shel
 cd RABBI-refactor
 
 # Multi-k with all solvers and plots
-python3 -m framework.cli multi \
+python3 -m cli multi \
   --param RABBI-refactor/tests/params_min.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP \
@@ -179,7 +175,7 @@ python3 -m framework.cli multi \
   --save-dir RABBI-refactor/data/pics
 
 # Cache mode to create shelve artifacts
-python3 -m framework.cli cache \
+python3 -m cli cache \
   --param RABBI-refactor/tests/params_min.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP \
