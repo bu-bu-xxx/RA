@@ -13,6 +13,10 @@ if REFAC_ROOT not in sys.path:
     sys.path.insert(0, REFAC_ROOT)
 
 from framework.runner import run_single, run_multi_k, run_multi_k_with_cache
+from framework.di import PolicyRegistry
+
+# Available solver names for help/choices
+SOLVER_CHOICES = PolicyRegistry.available_names()
 from framework.viz import Visualizer
 
 
@@ -32,24 +36,47 @@ def main():
     p_multi = sub.add_parser("multi")
     p_multi.add_argument("--param", required=True)
     p_multi.add_argument("--y-prefix", required=True)
-    p_multi.add_argument("--solvers", nargs="+", required=True)
+    p_multi.add_argument(
+        "--solvers",
+        nargs="+",
+        required=True,
+        choices=SOLVER_CHOICES,
+        metavar="SOLVER",
+        help=f"Solvers to run. Available: {', '.join(SOLVER_CHOICES)}",
+    )
     p_multi.add_argument("--max-concurrency", type=int, default=None)
     p_multi.add_argument("--seed", type=int, default=42)
     p_multi.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
     p_multi.add_argument("--save-dir", default="RABBI-refactor/data/pics")
+    p_multi.add_argument("--save-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
 
     p_cache = sub.add_parser("cache")
     p_cache.add_argument("--param", required=True)
     p_cache.add_argument("--y-prefix", required=True)
-    p_cache.add_argument("--solvers", nargs="+", required=True)
+    p_cache.add_argument(
+        "--solvers",
+        nargs="+",
+        required=True,
+        choices=SOLVER_CHOICES,
+        metavar="SOLVER",
+        help=f"Solvers to run with caching. Available: {', '.join(SOLVER_CHOICES)}",
+    )
     p_cache.add_argument("--max-concurrency", type=int, default=None)
     p_cache.add_argument("--seed", type=int, default=42)
     p_cache.add_argument("--shelve-dir", default="RABBI-refactor/data/shelve")
     p_cache.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
     p_cache.add_argument("--save-dir", default="RABBI-refactor/data/pics")
+    p_cache.add_argument("--save-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
 
     p_clear = sub.add_parser("clear-cache")
-    p_clear.add_argument("--solvers", nargs="*", default=[], help="Solvers to clear; default clears all known")
+    p_clear.add_argument(
+        "--solvers",
+        nargs="*",
+        default=[],
+        choices=SOLVER_CHOICES,
+        metavar="SOLVER",
+        help=f"Solvers to clear; default clears all known. Available: {', '.join(SOLVER_CHOICES)}",
+    )
     p_clear.add_argument("--shelve-dir", default="RABBI-refactor/data/shelve")
     p_clear.add_argument("--preview-clear", "--dry-run", "--preview", action="store_true", dest="preview_clear",
                          help="List files that would be removed without deleting them")
@@ -70,7 +97,7 @@ def main():
             print(name, totals)
         if args.plots:
             viz = Visualizer()
-            viz.generate_plots(results, args.plots, args.save_dir)
+            viz.generate_plots(results, args.plots, args.save_dir, file_prefix=args.save_prefix)
     elif args.cmd == "cache":
         solver_mod = __import__("solver")
         solver_classes = [getattr(solver_mod, name) for name in args.solvers]
@@ -84,7 +111,7 @@ def main():
             print(name, totals)
         if args.plots:
             viz = Visualizer()
-            viz.generate_plots(results, args.plots, args.save_dir)
+            viz.generate_plots(results, args.plots, args.save_dir, file_prefix=args.save_prefix)
     elif args.cmd == "clear-cache":
         os.makedirs(args.shelve_dir, exist_ok=True)
         # Accept arbitrary solver names; if none provided, use standard set

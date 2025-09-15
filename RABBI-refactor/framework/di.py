@@ -43,6 +43,11 @@ class PolicyRegistry:
     }
 
     @classmethod
+    def available_names(cls):
+        """Return sorted list of available solver names."""
+        return sorted(cls._registry.keys())
+
+    @classmethod
     def get_class(cls, name: str):
         """Return the solver class object by name (from solver.py)."""
         if name not in cls._registry:

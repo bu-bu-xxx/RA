@@ -4,6 +4,7 @@ Preserves existing behavior without renaming functions.
 from typing import Dict, List, Optional, Sequence, Tuple
 import os
 import concurrent.futures
+from concurrent.futures import as_completed
 
 from .di import Container
 from .results import RunResult, compute_total_reward
@@ -30,6 +31,7 @@ def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
 
 def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed: Optional[int] = None,
                k_val: Optional[float] = None) -> RunResult:
+    print(f"[run_single] param={param_file}, y_prefix={y_prefix}, solver={solver_name}, seed={seed}, k={k_val}", flush=True)
     container = Container(param_file, seed=seed, y_prefix=y_prefix)
     sim = container.make_sim()
     if k_val is not None:
@@ -41,6 +43,7 @@ def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed:
     solver = container.make_solver(solver_name, sim)
     solver.run()
     total = compute_total_reward(sim.params)
+    print(f"[run_single:done] solver={solver_name}, k={k_val}, total_reward={total:.4f}, steps={len(sim.params.reward_history)}", flush=True)
     return RunResult(solver_name=solver_name, k_val=k_val, params=sim.params, total_reward=total)
 
 
@@ -62,9 +65,27 @@ def run_multi_k(param_file: str, y_prefix: str, solver_classes: Sequence[type], 
     for solver_name in solver_names:
         for i, k_val in enumerate(k_values):
             all_args.append((len(all_args), k_val, param_file, y_prefix, solver_name, seed))
+    print(
+        f"[run_multi_k] param={param_file}, y_prefix={y_prefix}, solvers={solver_names}, "
+        f"k_values={[float(k) for k in k_values]}, max_concurrency={max_concurrency}, seed={seed}, tasks={len(all_args)}",
+        flush=True,
+    )
+    for task_idx, k_val, _p, _y, s, _seed in all_args:
+        print(f"  - task#{task_idx} solver={s} k={float(k_val)}", flush=True)
 
+    futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
-        all_results = list(executor.map(_universal_worker, all_args))
+        for args in all_args:
+            futures.append(executor.submit(_universal_worker, args))
+        all_results = []
+        for fut in as_completed(futures):
+            task_idx, params, solver_name = fut.result()
+            all_results.append((task_idx, params, solver_name))
+            # Derive k via position in schedule
+            k_val = all_args[task_idx][1]
+            total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
+            steps = len(getattr(params, 'reward_history', []) or [])
+            print(f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}", flush=True)
 
     # Group
     results_dict: Dict[str, List[object]] = {name: [None] * len(k_values) for name in solver_names}
@@ -139,9 +160,19 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
     results_dict: Dict[str, List[object]] = {name: [None] * len(k_values) for name in solver_names}
 
     if pending_tasks:
+        total_tasks = len(pending_tasks)
+        print(
+            f"[run_multi_k_with_cache] param={param_file}, y_prefix={y_prefix}, solvers={solver_names}, "
+            f"k_values={[float(k) for k in k_values]}, pending_tasks={total_tasks}, max_concurrency={max_concurrency}, seed={seed}",
+            flush=True,
+        )
+        for task_idx, k_val, _p, _y, s, _seed in pending_tasks:
+            print(f"  - task#{task_idx} solver={s} k={float(k_val)} (scheduled)", flush=True)
         max_workers = max_concurrency or os.cpu_count()
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for task_idx, params, solver_name in executor.map(_universal_worker, pending_tasks):
+            future_map = {executor.submit(_universal_worker, t): t for t in pending_tasks}
+            for fut in as_completed(future_map):
+                task_idx, params, solver_name = fut.result()
                 solver_name_mapped, k_idx = index_map[task_idx]
                 results_dict[solver_name_mapped][k_idx] = params
                 # write-through cache
@@ -153,6 +184,10 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                             db[key] = params
                     except (OSError, RuntimeError):
                         pass
+                k_val = pending_tasks[[t[0] for t in pending_tasks].index(task_idx)][1]
+                total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
+                steps = len(getattr(params, 'reward_history', []) or [])
+                print(f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}", flush=True)
 
     # fill from cache for existing ones
     for solver_name in solver_names:

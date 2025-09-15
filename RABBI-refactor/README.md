@@ -47,7 +47,8 @@ python3 -m RABBI-refactor.cli multi \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
-  --save-dir RABBI-refactor/data/pics
+  --save-dir RABBI-refactor/data/pics \
+  --save-prefix exp1_
 ```
 
 ### Multi-k with cache
@@ -60,8 +61,41 @@ python3 -m RABBI-refactor.cli cache \
   --max-concurrency 4 \
   --shelve-dir RABBI-refactor/data/shelve \
   --plots multi_k_results multi_k_ratio \
-  --save-dir RABBI-refactor/data/pics
+  --save-dir RABBI-refactor/data/pics \
+  --save-prefix exp1_
 ```
+
+### Available solvers and CLI help
+
+The `--solvers` argument now validates and shows available choices in `-h`:
+
+```bash
+python3 -m RABBI-refactor.cli multi -h
+```
+
+Available solver names:
+
+- RABBI
+- OFFline
+- NPlusOneLP
+- TopKLP
+
+### Plot filename prefix
+
+- Use `--save-prefix <prefix>` to prepend a prefix to generated image filenames.
+- Example outputs: `exp1_multi_k_results.png`, `exp1_multi_k_ratio_results.png`,
+  `exp1_multi_k_regret_results.png`, `exp1_lp_x_benchmark_ratio_vs_k.png`.
+
+### Logging / Progress
+
+Runs print progress to stdout:
+
+- Start banner with parameters: `param`, `y_prefix`, `solvers`, `k_values`, `max_concurrency`, `seed`, task count
+- Per-task schedule lines: `- task#<idx> solver=<name> k=<value>`
+- Per-task completion lines: `[done] task#<idx> solver=<name> k=<value> total_reward=<sum> steps=<T>`
+- `run_single` prints a start line and a completion summary.
+
+This makes long multi-k runs observable in real time without extra flags.
 
 ## Plot keys
 - `multi_k_results`: total reward vs k of multiple policies
