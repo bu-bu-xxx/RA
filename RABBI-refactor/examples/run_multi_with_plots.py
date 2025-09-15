@@ -3,7 +3,7 @@
 import os
 import sys
 
-# Ensure refactor root on path
+# Ensure refactor root on path so 'framework' imports resolve
 ROOT = os.path.dirname(os.path.dirname(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -13,13 +13,13 @@ from framework.viz import Visualizer
 
 
 def main():
-    param_file = os.path.join(ROOT, 'params5.yml')
+    param_file = os.path.join(ROOT, 'params', 'params5.yml')
     y_prefix = os.path.join(ROOT, 'data', 'Y', 'Y_matrix_params5')
     os.makedirs(os.path.join(ROOT, 'data', 'Y'), exist_ok=True)
     os.makedirs(os.path.join(ROOT, 'data', 'pics'), exist_ok=True)
 
     # Select solvers by name
-    import solver as solver_mod
+    from framework import solver as solver_mod
     solver_classes = [solver_mod.OFFline, solver_mod.NPlusOneLP]
 
     results = run_multi_k(param_file, y_prefix, solver_classes, max_concurrency=None, seed=42)

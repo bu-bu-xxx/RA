@@ -14,7 +14,7 @@ It does not rename or change any function/class/variable in the original logic. 
   - `runner.py`: Orchestration for single/multi-k runs (with cache).
   - `results.py`: Standard result objects and metrics wrappers.
   - `viz.py`: Visualization with inlined plotting implementations.
-- `cli.py`: Simple CLI for single/multi/cache runs with optional plots.
+- `framework/cli.py`: CLI for single/multi/cache runs with optional plots.
 - `examples/`: Quick examples.
 - Copied originals: `solver.py`, `customer.py`, `env.py`, `read_params.py`, `params*.yml`.
 
@@ -33,7 +33,9 @@ mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/shelve RABBI-refactor/data/pi
 ### Single run
 
 ```bash
-python3 -m RABBI-refactor.cli single \
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
+python3 -m framework.cli single \
   --param RABBI-refactor/tests/params_min.yml \
   --solver RABBI \
   --seed 123
@@ -42,8 +44,10 @@ python3 -m RABBI-refactor.cli single \
 ### Multi-k run
 
 ```bash
-python3 -m RABBI-refactor.cli multi \
-  --param RABBI-refactor/params5.yml \
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
+python3 -m framework.cli multi \
+  --param RABBI-refactor/params/params5.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
@@ -54,8 +58,10 @@ python3 -m RABBI-refactor.cli multi \
 ### Multi-k with cache
 
 ```bash
-python3 -m RABBI-refactor.cli cache \
-  --param RABBI-refactor/params5.yml \
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
+python3 -m framework.cli cache \
+  --param RABBI-refactor/params/params5.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP \
   --max-concurrency 4 \
@@ -70,7 +76,9 @@ python3 -m RABBI-refactor.cli cache \
 The `--solvers` argument now validates and shows available choices in `-h`:
 
 ```bash
-python3 -m RABBI-refactor.cli multi -h
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
+python3 -m framework.cli multi -h
 ```
 
 Available solver names:
@@ -121,9 +129,11 @@ python3 RABBI-refactor/examples/run_multi_with_plots.py
 - To force a clean state, clear cache files:
 
 ```bash
-python3 -m RABBI-refactor.cli clear-cache --shelve-dir RABBI-refactor/data/shelve
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
+python3 -m framework.cli clear-cache --shelve-dir RABBI-refactor/data/shelve
 # Or specific solvers
-python3 -m RABBI-refactor.cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refactor/data/shelve
+python3 -m framework.cli clear-cache --solvers OFFline NPlusOneLP --shelve-dir RABBI-refactor/data/shelve
 ```
 
 ### Clear-cache preview (no deletion)
@@ -133,14 +143,16 @@ python3 -m RABBI-refactor.cli clear-cache --solvers OFFline NPlusOneLP --shelve-
 Examples:
 
 ```bash
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
 # Preview all cache files in default directory
-python3 -m RABBI-refactor.cli clear-cache --preview-clear
+python3 -m framework.cli clear-cache --preview-clear
 
 # Preview for specific solvers only
-python3 -m RABBI-refactor.cli clear-cache --solvers OFFline NPlusOneLP --preview-clear
+python3 -m framework.cli clear-cache --solvers OFFline NPlusOneLP --preview-clear
 
 # Preview with a custom cache directory
-python3 -m RABBI-refactor.cli clear-cache --shelve-dir RABBI-refactor/data/shelve --preview-clear
+python3 -m framework.cli clear-cache --shelve-dir RABBI-refactor/data/shelve --preview-clear
 ```
 
 Output:
@@ -155,8 +167,11 @@ Run a comprehensive smoke test covering all solvers (RABBI, OFFline, NPlusOneLP,
 # Ensure required directories exist
 mkdir -p RABBI-refactor/data/Y RABBI-refactor/data/pics RABBI-refactor/data/shelve
 
+# Run from inside the RABBI-refactor folder
+cd RABBI-refactor
+
 # Multi-k with all solvers and plots
-python3 -m RABBI-refactor.cli multi \
+python3 -m framework.cli multi \
   --param RABBI-refactor/tests/params_min.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP \
@@ -164,7 +179,7 @@ python3 -m RABBI-refactor.cli multi \
   --save-dir RABBI-refactor/data/pics
 
 # Cache mode to create shelve artifacts
-python3 -m RABBI-refactor.cli cache \
+python3 -m framework.cli cache \
   --param RABBI-refactor/tests/params_min.yml \
   --y-prefix RABBI-refactor/data/Y/Y_matrix_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP \

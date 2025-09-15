@@ -3,8 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 import numpy as np
-from pathlib import Path
-import sys
+# Note: No external path manipulation needed; rely on local framework modules
 
 
 @dataclass
@@ -36,16 +35,8 @@ def compute_lp_x_benchmark(params) -> np.ndarray:
         main_mod = __import__("main", fromlist=["compute_lp_x_benchmark"])
         return main_mod.compute_lp_x_benchmark(params)
     except (ImportError, AttributeError):
-        # Fallback: re-implement with the same semantics but without renaming
-        # Ensure neighbor path is available
-        here = Path(__file__).resolve()
-        repo_root = here.parents[2] if len(here.parents) >= 3 else here.parent
-        neighbor = repo_root / "RABBI-Neighbor"
-        if neighbor.is_dir():
-            str_neighbor = str(neighbor)
-            if str_neighbor not in sys.path:
-                sys.path.insert(0, str_neighbor)
-        from solver import LPBasedPolicy
+        # Fallback: re-implement with the same semantics using LPBasedPolicy.solve_lp
+        from .solver import LPBasedPolicy
         T = len(params.alpha_history)
         result = []
         for t in range(T):

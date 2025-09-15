@@ -6,11 +6,11 @@ Includes three parts:
     (RABBI, OFFline, NPlusOneLP, TopKLP) on `tests/params_min.yml` (seed=42,
     max_concurrency=2) and asserts each solver/k returns params with a non-empty
     reward_history and non-negative total reward.
-2) CLI multi + plots: runs `python -m RABBI-refactor.cli multi` with all
+2) CLI multi + plots: runs `python -m framework.cli multi` with all
     solvers, generates plots (multi_k_results, multi_k_ratio, multi_k_regret,
     lp_x_benchmark_ratio) and asserts the expected PNG files exist under
     `RABBI-refactor/data/pics`.
-3) CLI cache: runs `python -m RABBI-refactor.cli cache` with all solvers and
+3) CLI cache: runs `python -m framework.cli cache` with all solvers and
     asserts shelve artifacts exist under `RABBI-refactor/data/shelve` (accepts
     varying dbm extensions).
 """
@@ -36,7 +36,7 @@ def test_run_multi_k_all_solvers_smoke():
     os.makedirs(os.path.dirname(y_prefix), exist_ok=True)
 
     # Import solver classes dynamically
-    solver_mod = __import__("solver")
+    from framework import solver as solver_mod
     solver_classes = [getattr(solver_mod, name) for name in ("RABBI", "OFFline", "NPlusOneLP", "TopKLP")]
 
     results = run_multi_k(param, y_prefix, solver_classes, max_concurrency=2, seed=42)
@@ -66,7 +66,7 @@ def test_cli_multi_plots_and_cache_smoke():
     cmd_multi = [
         sys.executable,
         "-m",
-        "RABBI-refactor.cli",
+        "framework.cli",
         "multi",
         "--param",
         param,
@@ -86,7 +86,7 @@ def test_cli_multi_plots_and_cache_smoke():
         pics_dir,
     ]
     # Run from repo root so module resolution works
-    proc = subprocess.run(cmd_multi, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.run(cmd_multi, cwd=REFAC_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     assert proc.returncode == 0, f"CLI multi failed: stdout={proc.stdout}\nstderr={proc.stderr}"
 
     # Check expected plot files exist
@@ -103,7 +103,7 @@ def test_cli_multi_plots_and_cache_smoke():
     cmd_cache = [
         sys.executable,
         "-m",
-        "RABBI-refactor.cli",
+        "framework.cli",
         "cache",
         "--param",
         param,
@@ -121,7 +121,7 @@ def test_cli_multi_plots_and_cache_smoke():
         "--save-dir",
         pics_dir,
     ]
-    proc2 = subprocess.run(cmd_cache, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc2 = subprocess.run(cmd_cache, cwd=REFAC_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     assert proc2.returncode == 0, f"CLI cache failed: stdout={proc2.stdout}\nstderr={proc2.stderr}"
 
     # Verify cache files exist
