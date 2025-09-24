@@ -42,6 +42,8 @@ class Parameters:
         self.alpha_history = []
         self.Y = None
         self.Q = None
+        # Count of times a sale is blocked due to inventory infeasibility (post-check-original)
+        self.no_sell_cnt = 0
 
 
 class ParamsLoader:
@@ -174,6 +176,7 @@ class DynamicPricingEnv(ParamsLoader):
         self.params.b_history = [self.params.b.copy()]
         self.params.j_history = []
         self.params.alpha_history = []
+        self.params.no_sell_cnt = 0
         return self._get_obs()
 
     def _get_obs(self):
@@ -207,6 +210,8 @@ class DynamicPricingEnv(ParamsLoader):
             info['sold'] = True
         else:
             info['sold'] = False
+            # Blocked by inventory infeasibility under post-check-original
+            self.params.no_sell_cnt += 1
 
         self.params.reward_history.append(reward)
         self.params.b_history.append(self.params.b.copy())

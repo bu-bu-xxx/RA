@@ -80,7 +80,11 @@ def main():
 
     if args.cmd == "single":
         res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed, debug=args.debug)
-        print(f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}")
+        no_sell_cnt = getattr(res.params, 'no_sell_cnt', None)
+        if no_sell_cnt is not None:
+            print(f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}, no_sell_cnt={no_sell_cnt}")
+        else:
+            print(f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}")
     elif args.cmd == "multi":
         # Dynamically resolve solver classes by name from local solver module
         from . import solver as solver_mod
