@@ -66,6 +66,6 @@ class Container:
                 os.makedirs(y_dir, exist_ok=True)
             sim.save_Y(y_file)
 
-    def make_solver(self, name: str, sim):
+    def make_solver(self, name: str, sim, debug: bool = False):
         SolverClass = PolicyRegistry.get_class(name)
-        return SolverClass(sim, debug=False)
+        return SolverClass(sim, debug=debug)

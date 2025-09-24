@@ -24,13 +24,13 @@ def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
     container.prepare_Y(sim, k_val=k_val)
     # compute offline Q for all solvers to enable LP benchmark and parity with original main
     sim.compute_offline_Q()
-    solver = container.make_solver(solver_name, sim)
+    solver = container.make_solver(solver_name, sim, debug=False)
     solver.run()
     return (task_idx, sim.params, solver_name)
 
 
 def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed: Optional[int] = None,
-               k_val: Optional[float] = None) -> RunResult:
+               k_val: Optional[float] = None, debug: bool = False) -> RunResult:
     print(f"[run_single] param={param_file}, y_prefix={y_prefix}, solver={solver_name}, seed={seed}, k={k_val}", flush=True)
     container = Container(param_file, seed=seed, y_prefix=y_prefix)
     sim = container.make_sim()
@@ -40,7 +40,7 @@ def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed:
     container.prepare_Y(sim, k_val=k_val)
     # For compatibility with compute_lp_x_benchmark, compute Q regardless of solver
     sim.compute_offline_Q()
-    solver = container.make_solver(solver_name, sim)
+    solver = container.make_solver(solver_name, sim, debug=debug)
     solver.run()
     total = compute_total_reward(sim.params)
     print(f"[run_single:done] solver={solver_name}, k={k_val}, total_reward={total:.4f}, steps={len(sim.params.reward_history)}", flush=True)

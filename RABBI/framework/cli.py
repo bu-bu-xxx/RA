@@ -26,6 +26,7 @@ def main():
     p_single.add_argument("--solver", required=True)
     p_single.add_argument("--y-prefix", required=False, default=None)
     p_single.add_argument("--seed", type=int, default=42)
+    p_single.add_argument("--debug", action="store_true", default=False, help="Enable verbose debug logs for single run only")
 
     p_multi = sub.add_parser("multi")
     p_multi.add_argument("--param", required=True)
@@ -78,7 +79,7 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "single":
-        res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed)
+        res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed, debug=args.debug)
         print(f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}")
     elif args.cmd == "multi":
         # Dynamically resolve solver classes by name from local solver module

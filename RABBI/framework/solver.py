@@ -2,6 +2,17 @@ import numpy as np
 from scipy.optimize import linprog, minimize
 
 
+def _format_prices_vec(vec):
+    def _fmt(x):
+        xv = float(x)
+        xr = round(xv)
+        if abs(xv - xr) < 1e-9:
+            return str(int(xr))
+        s = ("{:f}".format(xv)).rstrip('0').rstrip('.')
+        return s or "0"
+    arr = np.asarray(vec).tolist()
+    return "[" + " ".join(_fmt(v) for v in arr) + "]"
+
 class LPBasedPolicy:
     def __init__(self, env):
         self.env = env
@@ -33,18 +44,24 @@ class LPBasedPolicy:
 class RABBI(LPBasedPolicy):
     def __init__(self, env, debug=False):
         super().__init__(env)
+        self.debug = debug
 
     def run(self):
         env = self.env
         env.reset()
         Y = env.params.Y if env.params.Y is not None else env.generate_Y_matrix()
         b = env.params.B.copy()
+        if getattr(self, 'debug', False):
+            print(f"[RABBI] start T={env.params.T} n={env.params.n} m={env.params.m} d={env.params.d}")
         for t in range(env.params.T):
             p_t = env.params.p
             x_t = self.solve_lp(b, p_t, t, env.params.n, env.params.m, env.params.d, env.params.f, env.params.A, env.params.T)
             self.params.x_history.append(x_t)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
+            if getattr(self, 'debug', False):
+                sel_prices = env.params.f[:, alpha]
+                print(f"[RABBI] t={t} b={b} alpha={alpha} j={j} max_x={x_t[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices)}")
             env.step(j, alpha)
             b = env.params.b.copy()
 
@@ -52,18 +69,24 @@ class RABBI(LPBasedPolicy):
 class OFFline(LPBasedPolicy):
     def __init__(self, env, debug=False):
         super().__init__(env)
+        self.debug = debug
 
     def run(self):
         env = self.env
         env.reset()
         Y = env.params.Y if env.params.Y is not None else env.generate_Y_matrix()
         b = env.params.B.copy()
+        if getattr(self, 'debug', False):
+            print(f"[OFFline] start T={env.params.T} n={env.params.n} m={env.params.m} d={env.params.d}")
         for t in range(env.params.T):
             p_t = env.params.Q[t, :, :]
             x_t = self.solve_lp(b, p_t, t, env.params.n, env.params.m, env.params.d, env.params.f, env.params.A, env.params.T)
             self.params.x_history.append(x_t)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
+            if getattr(self, 'debug', False):
+                sel_prices = env.params.f[:, alpha]
+                print(f"[OFFline] t={t} b={b} alpha={alpha} j={j} max_x={x_t[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices)}")
             env.step(j, alpha)
             b = env.params.b.copy()
 
@@ -208,11 +231,16 @@ class NPlusOneLP(LPBasedPolicy):
         env.reset()
         Y = env.params.Y if env.params.Y is not None else env.generate_Y_matrix()
         b = env.params.B.copy()
+        if getattr(self, 'debug', False):
+            print(f"[NPlusOneLP] start T={env.params.T} n={env.params.n} m={env.params.m} d={env.params.d} topk=None")
         for t in range(env.params.T):
             neighbors, zeta_star = self.get_pricing_policy()
             x_t = self.map_zeta_to_xt(neighbors, zeta_star, env.params.f)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
+            if getattr(self, 'debug', False):
+                sel_prices = env.params.f[:, alpha]
+                print(f"[NPlusOneLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices)}")
             env.step(j, alpha)
             self.params.x_history.append(x_t)
             b = env.params.b.copy()
@@ -364,12 +392,17 @@ class TopKLP(LPBasedPolicy):
         env.reset()
         Y = env.params.Y if env.params.Y is not None else env.generate_Y_matrix()
         b = env.params.B.copy()
+        if getattr(self, 'debug', False):
+            print(f"[TopKLP] start T={env.params.T} n={env.params.n} m={env.params.m} d={env.params.d} topk={self.topk}")
         for t in range(env.params.T):
             self.iteration = t
             neighbors, zeta_star = self.get_pricing_policy()
             x_t = NPlusOneLP.map_zeta_to_xt(neighbors, zeta_star, env.params.f)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
+            if getattr(self, 'debug', False):
+                sel_prices = env.params.f[:, alpha]
+                print(f"[TopKLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices)}")
             env.step(j, alpha)
             env.params.x_history.append(x_t)
             b = env.params.b.copy()
