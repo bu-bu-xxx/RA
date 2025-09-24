@@ -27,6 +27,7 @@ def main():
     p_single.add_argument("--y-prefix", required=False, default=None)
     p_single.add_argument("--seed", type=int, default=42)
     p_single.add_argument("--debug", action="store_true", default=False, help="Enable verbose debug logs for single run only")
+    p_single.add_argument("-k", "--k", type=float, default=1.0, help="Scale factor k (>=0). Scales horizon T and budget B by k; default 1.0")
 
     p_multi = sub.add_parser("multi")
     p_multi.add_argument("--param", required=True)
@@ -79,7 +80,7 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "single":
-        res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed, debug=args.debug)
+        res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed, k_val=args.k, debug=args.debug)
         no_sell_cnt = getattr(res.params, 'no_sell_cnt', None)
         if no_sell_cnt is not None:
             print(f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}, no_sell_cnt={no_sell_cnt}")
