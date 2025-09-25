@@ -15,7 +15,7 @@ It does not rename or change any function/class/variable in the original logic. 
   - `runner.py`: Orchestration for single/multi-k runs (with cache).
   - `results.py`: Standard result objects and metrics wrappers.
   - `viz.py`: Visualization for multi-policy results.
-  - `solver.py`: Policy implementations (RABBI, OFFline, NPlusOneLP, TopKLP).
+  - `solver.py`: Policy implementations (RABBI, OFFline, NPlusOneLP, TopKLP, Robust).
   - `customer.py`: Customer simulator built on the environment.
   - `env.py`: Parameter loading and environment dynamics.
 - `examples/`: Quick examples.
@@ -54,7 +54,7 @@ cd RABBI
 python3 -m cli multi \
   --param params/params5.yml \
   --y-prefix data/Y/Y_matrix_params5 \
-  --solvers OFFline NPlusOneLP \
+  --solvers OFFline NPlusOneLP Robust \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
   --save-dir data/pics \
   --save-prefix exp1_
@@ -68,7 +68,7 @@ cd RABBI
 python3 -m cli cache \
   --param params/params5.yml \
   --y-prefix data/Y/Y_matrix_params5 \
-  --solvers OFFline NPlusOneLP \
+  --solvers OFFline NPlusOneLP Robust \
   --max-concurrency 4 \
   --shelve-dir data/shelve \
   --plots multi_k_results multi_k_ratio \
@@ -86,7 +86,7 @@ cd RABBI
 python3 -m cli multi -h
 ```
 
-Available solver names: RABBI, OFFline, NPlusOneLP, TopKLP
+Available solver names: RABBI, OFFline, NPlusOneLP, TopKLP, Robust
 
 ### Plot filename prefix
 
@@ -159,7 +159,7 @@ Output:
 
 ## Smoke Test (All Solvers)
 
-Run a comprehensive smoke test covering all solvers (RABBI, OFFline, NPlusOneLP, TopKLP), including plot generation and cache:
+Run a comprehensive smoke test covering all solvers (RABBI, OFFline, NPlusOneLP, TopKLP, Robust), including plot generation and cache:
 
 ```bash
 # Ensure required directories exist
@@ -169,7 +169,7 @@ mkdir -p data/Y data/pics data/shelve
 python3 -m cli multi \
   --param tests/params_min.yml \
   --y-prefix data/Y/Y_matrix_params_min \
-  --solvers RABBI OFFline NPlusOneLP TopKLP \
+  --solvers RABBI OFFline NPlusOneLP TopKLP Robust \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
   --save-dir data/pics
 
@@ -177,7 +177,7 @@ python3 -m cli multi \
 python3 -m cli cache \
   --param tests/params_min.yml \
   --y-prefix data/Y/Y_matrix_params_min \
-  --solvers RABBI OFFline NPlusOneLP TopKLP \
+  --solvers RABBI OFFline NPlusOneLP TopKLP Robust \
   --shelve-dir data/shelve \
   --plots multi_k_results \
   --save-dir data/pics

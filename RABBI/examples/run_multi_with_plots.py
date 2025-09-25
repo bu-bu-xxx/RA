@@ -20,7 +20,11 @@ def main():
 
     # Select solvers by name
     from framework import solver as solver_mod
-    solver_classes = [solver_mod.OFFline, solver_mod.NPlusOneLP]
+    solver_classes = [
+        solver_mod.OFFline,
+        solver_mod.NPlusOneLP,
+        solver_mod.Robust,
+    ]
 
     results = run_multi_k(param_file, y_prefix, solver_classes, max_concurrency=None, seed=42)
 

@@ -1,0 +1,68 @@
+# Parameters template for RABBI framework
+#
+# This file documents all supported configuration fields, including
+# Robust-RABBI (Robust) specific options. Adjust values as needed.
+# Remove comments or unused sections for your experiments.
+
+# Core instance & environment state
+product_number: 3           # n: number of products (int)
+resource_number: 2          # d: number of resource types (int)
+resource_matrix:            # A ∈ R^{n×d}: per-product resource usage (nonnegative)
+  - [1, 0]                  # row i corresponds to product i
+  - [0, 1]
+  - [1, 1]
+
+# Price grids (per product). Each row P_i is a list of candidate prices.
+# IMPORTANT: The last price in each row should be a large "no-sell" price.
+price_set_matrix:
+  - [5, 10, 15, 100000000]  # P_1 (include a very large no-sell price)
+  - [5, 15, 100000000]      # P_2
+  - [10, 20, 100000000]     # P_3
+
+# Time and budgets
+horizon: 20                 # T: total periods (int)
+budget: [10, 8]             # B ∈ R^d: initial resource budgets (array length d)
+
+# Scaling list k: when running multi-k experiments, T and B are scaled by each k
+scaling_list: [1, 5, 10]    # used by CLI multi/cache flows
+
+# Demand model selection
+# Choose one of: "MNL" or "LINEAR"
+demand_model: "MNL"
+
+# Demand model parameters
+MNL:                         # Used only if demand_model == "MNL"
+  d: [10.0, 8.0, 12.0]      # Intrinsic attraction vector (length n)
+  mu: 10.0                  # Rationality parameter (>0)
+  u0: 0                     # Utility of outside option
+  gamma: 1.0                # Price sensitivity scaling (>0)
+
+Linear:                      # Used only if demand_model == "LINEAR"
+  psi: [10, 8, 6]           # Intercept vector (length n)
+  theta:                    # Sensitivity matrix Θ (n×n), mapping prices to demand
+    - [-0.5, -0.1, -0.1]
+    - [-0.1, -0.5, -0.1]
+    - [-0.1, -0.1, -0.5]
+
+# Numerical tolerance used to zero-out tiny probabilities in demand matrices
+# Also used when building feasibility-aware coefficients.
+tolerance: 1e-4
+
+# Top-K parameter (used by TopKLP solver; Robust may use it as top-k violators per iteration)
+# If larger than n, it will be clipped to n.
+topk: 3
+
+# Robust-RABBI (Robust) specific options (optional section)
+robust:
+  eta: 1e-8       # η > 0: feasibility slack; stop separation when max reduced cost ≤ η
+  sep_eps: 1e-6   # ε_sep > 0: oracle accuracy; reserved (current implementation enumerates menus)
+
+# Notes:
+# - The framework generates the full price matrix f (n×m) by taking the Cartesian
+#   product of price_set_matrix rows, and computes a demand matrix p (n×m) from
+#   the selected demand model.
+# - RABBI/OFFline/NPlusOneLP/TopKLP/Robust all share the same environment; any
+#   solver-specific settings live under their own sections (e.g., robust).
+# - For Robust solver, the algorithm performs per-period column generation using
+#   the dual (λ ≥ 0, μ ≥ 0) reduced-cost separation; it keeps x_history as length m
+#   with zeros for non-selected columns.

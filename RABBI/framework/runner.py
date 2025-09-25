@@ -10,6 +10,27 @@ from .di import Container
 from .results import RunResult, compute_total_reward
 
 
+def _log_robust_stats(solver_name: str, params, context: str, k_val: Optional[float] = None) -> None:
+    """Print Robust-specific statistics if available."""
+    if solver_name != "Robust":
+        return
+    history = getattr(params, "A_prime_size_history", None)
+    if not history:
+        return
+    avg_size = sum(history) / len(history)
+    max_size = max(history)
+    m_val = getattr(params, "m", None)
+    m_suffix = f", m={m_val}" if m_val is not None else ""
+    if k_val is not None:
+        try:
+            k_numeric = float(k_val)
+        except (TypeError, ValueError):
+            k_numeric = k_val
+        print(f"{context} avg_A_prime_size={avg_size:.2f}, max_A_prime_size={max_size}, k={k_numeric}{m_suffix}", flush=True)
+    else:
+        print(f"{context} avg_A_prime_size={avg_size:.2f}, max_A_prime_size={max_size}{m_suffix}", flush=True)
+
+
 def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
     """Worker compatible with concurrent.futures for multi-k runs.
     Args: (task_idx, k_val, param_file, y_prefix, solver_name, seed)
@@ -44,6 +65,7 @@ def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed:
     solver.run()
     total = compute_total_reward(sim.params)
     print(f"[run_single:done] solver={solver_name}, k={k_val}, total_reward={total:.4f}, steps={len(sim.params.reward_history)}", flush=True)
+    _log_robust_stats(solver_name, sim.params, "[run_single:robust]", k_val=k_val)
     return RunResult(solver_name=solver_name, k_val=k_val, params=sim.params, total_reward=total)
 
 
@@ -86,6 +108,7 @@ def run_multi_k(param_file: str, y_prefix: str, solver_classes: Sequence[type], 
             total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
             steps = len(getattr(params, 'reward_history', []) or [])
             print(f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}", flush=True)
+            _log_robust_stats(solver_name, params, f"    robust stats (task#{task_idx})", k_val=k_val)
 
     # Group
     results_dict: Dict[str, List[object]] = {name: [None] * len(k_values) for name in solver_names}
@@ -188,6 +211,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                 total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
                 steps = len(getattr(params, 'reward_history', []) or [])
                 print(f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}", flush=True)
+                _log_robust_stats(solver_name, params, f"    robust stats (task#{task_idx})", k_val=k_val)
 
     # fill from cache for existing ones
     for solver_name in solver_names:
@@ -233,5 +257,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                             db[key] = params
                     except (OSError, RuntimeError):
                         pass
+                k_val = k_values[k_idx]
+                _log_robust_stats(solver_name, params, f"    robust stats (task#{task_idx})", k_val=k_val)
 
     return results_dict

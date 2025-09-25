@@ -29,3 +29,8 @@ Linear:
 
 # 代表每个产品对自身价格敏感，对其他产品价格也有影响
 tolerance: 1e-4
+
+# New: Robust-RABBI solver settings (optional)
+robust:
+  eta: 1e-8      # Feasibility slack η: stop column generation when max reduced cost ≤ η
+  sep_eps: 1e-6  # Oracle accuracy ε_sep (reserved; current implementation uses η for stopping)

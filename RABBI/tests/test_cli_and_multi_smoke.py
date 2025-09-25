@@ -37,12 +37,12 @@ def test_run_multi_k_all_solvers_smoke():
 
     # Import solver classes dynamically
     from framework import solver as solver_mod
-    solver_classes = [getattr(solver_mod, name) for name in ("RABBI", "OFFline", "NPlusOneLP", "TopKLP")]
+    solver_classes = [getattr(solver_mod, name) for name in ("RABBI", "OFFline", "NPlusOneLP", "TopKLP", "Robust")]
 
     results = run_multi_k(param, y_prefix, solver_classes, max_concurrency=2, seed=42)
 
     # Basic assertions: keys exist, each k entry has params with non-empty reward_history
-    assert set(results.keys()) == {"RABBI", "OFFline", "NPlusOneLP", "TopKLP"}
+    assert set(results.keys()) == {"RABBI", "OFFline", "NPlusOneLP", "TopKLP", "Robust"}
     for name, plist in results.items():
         assert len(plist) >= 1
         for params in plist:
@@ -77,6 +77,7 @@ def test_cli_multi_plots_and_cache_smoke():
         "OFFline",
         "NPlusOneLP",
         "TopKLP",
+    "Robust",
         "--plots",
         "multi_k_results",
         "multi_k_ratio",
@@ -114,6 +115,7 @@ def test_cli_multi_plots_and_cache_smoke():
         "OFFline",
         "NPlusOneLP",
         "TopKLP",
+    "Robust",
         "--shelve-dir",
         shelve_dir,
         "--plots",
@@ -125,7 +127,7 @@ def test_cli_multi_plots_and_cache_smoke():
     assert proc2.returncode == 0, f"CLI cache failed: stdout={proc2.stdout}\nstderr={proc2.stderr}"
 
     # Verify cache files exist
-    for name in ("RABBI", "OFFline", "NPlusOneLP", "TopKLP"):
+    for name in ("RABBI", "OFFline", "NPlusOneLP", "TopKLP", "Robust"):
         path = os.path.join(shelve_dir, f"params_{name.lower()}.shelve.db")
         # Different dbm implementations vary extensions; check prefix existence
         prefix = os.path.join(shelve_dir, f"params_{name.lower()}.shelve")

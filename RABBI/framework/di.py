@@ -15,6 +15,7 @@ class PolicyRegistry:
         "OFFline": "OFFline",
         "NPlusOneLP": "NPlusOneLP",
         "TopKLP": "TopKLP",
+        "Robust": "Robust",
     }
 
     @classmethod

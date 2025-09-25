@@ -44,6 +44,9 @@ class Parameters:
         self.Q = None
         # Count of times a sale is blocked due to inventory infeasibility (post-check-original)
         self.no_sell_cnt = 0
+        # New-added optional robust solver settings
+        self.sep_eps = 1e-6  # math: ε_sep (oracle accuracy), not strictly used but available
+        self.eta = 1e-8      # math: η (feasibility slack)
 
 
 class ParamsLoader:
@@ -60,7 +63,7 @@ class ParamsLoader:
         self.params.T = int(yaml_params['horizon'])
         self.params.B = np.array(yaml_params['budget'], dtype=float)
         self.params.k = np.array(yaml_params['scaling_list'], dtype=float)
-        self.params.topk = int(yaml_params.get('topk', 9999))
+        self.params.topk = int(yaml_params.get('topk', 10000000))
         self.params.f = self.generate_price_combinations(self.params.f_split)
         self.params.m = self.params.f.shape[1]
 
@@ -74,6 +77,11 @@ class ParamsLoader:
         self.params.tolerance = float(yaml_params.get('tolerance', 1e-4))
         self.params.mnl = MNLParams()
         self.params.linear = LinearParams()
+        # New-added: optional Robust solver parameters from YAML
+        robust_cfg = yaml_params.get('robust', {}) or {}
+        # Also allow top-level overrides for convenience
+        self.params.eta = float(robust_cfg.get('eta', yaml_params.get('eta', self.params.eta)))
+        self.params.sep_eps = float(robust_cfg.get('sep_eps', yaml_params.get('sep_eps', self.params.sep_eps)))
 
         if 'MNL' in yaml_params:
             self.params.mnl.d = np.array(yaml_params['MNL'].get('d'), dtype=float)
