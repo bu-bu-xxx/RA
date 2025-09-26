@@ -10,25 +10,52 @@ from .di import Container
 from .results import RunResult, compute_total_reward
 
 
-def _log_robust_stats(solver_name: str, params, context: str, k_val: Optional[float] = None) -> None:
-    """Print Robust-specific statistics if available."""
-    if solver_name != "Robust":
-        return
-    history = getattr(params, "A_prime_size_history", None)
-    if not history:
-        return
-    avg_size = sum(history) / len(history)
-    max_size = max(history)
-    m_val = getattr(params, "m", None)
-    m_suffix = f", m={m_val}" if m_val is not None else ""
-    if k_val is not None:
-        try:
-            k_numeric = float(k_val)
-        except (TypeError, ValueError):
-            k_numeric = k_val
-        print(f"{context} avg_A_prime_size={avg_size:.2f}, max_A_prime_size={max_size}, k={k_numeric}{m_suffix}", flush=True)
-    else:
-        print(f"{context} avg_A_prime_size={avg_size:.2f}, max_A_prime_size={max_size}{m_suffix}", flush=True)
+def _collect_extra_fields(solver_name: str, params, k_val: Optional[float]) -> List[str]:
+    extras: List[str] = []
+    if solver_name == "Robust":
+        history = getattr(params, "A_prime_size_history", None)
+        if history:
+            avg_size = sum(history) / len(history)
+            max_size = max(history)
+            extras.append(f"avg_A_prime_size={avg_size:.2f}")
+            extras.append(f"max_A_prime_size={max_size}")
+            if k_val is not None:
+                try:
+                    k_numeric = float(k_val)
+                except (TypeError, ValueError):
+                    k_numeric = k_val
+                extras.append(f"k={k_numeric}")
+            m_val = getattr(params, "m", None)
+            if m_val is not None:
+                extras.append(f"m={m_val}")
+
+    no_sell_cnt = getattr(params, "no_sell_cnt", None)
+    if no_sell_cnt is not None:
+        extras.append(f"no_sell_cnt={no_sell_cnt}")
+
+    return extras
+
+
+def _extract_error_detail(exc: BaseException) -> str:
+    if exc is None:
+        return ""
+    detail = str(exc) or exc.__class__.__name__
+    return detail
+
+
+def _describe_task(task_args: Tuple[int, float, str, str, str, Optional[int]]) -> str:
+    task_idx, k_val, _param_file, _y_prefix, solver_name, _seed = task_args
+    try:
+        k_numeric = float(k_val)
+    except (TypeError, ValueError):
+        k_numeric = k_val
+    return f"task#{task_idx} solver={solver_name} k={k_numeric} (scheduled)"
+
+
+def _log_task_error(context: str, task_args: Tuple[int, float, str, str, str, Optional[int]], exc: BaseException) -> None:
+    description = _describe_task(task_args)
+    detail = _extract_error_detail(exc)
+    print(f"[{context}:error] {description} failed: {detail}", flush=True)
 
 
 def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
@@ -62,10 +89,20 @@ def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed:
     # For compatibility with compute_lp_x_benchmark, compute Q regardless of solver
     sim.compute_offline_Q()
     solver = container.make_solver(solver_name, sim, debug=debug)
-    solver.run()
+    try:
+        solver.run()
+    except Exception as exc:  # pragma: no cover - pass-through for logging at caller
+        effective_k = k_val if k_val is not None else 1.0
+        _log_task_error("run_single", (0, effective_k, param_file, y_prefix, solver_name, seed), exc)
+        raise
     total = compute_total_reward(sim.params)
-    print(f"[run_single:done] solver={solver_name}, k={k_val}, total_reward={total:.4f}, steps={len(sim.params.reward_history)}", flush=True)
-    _log_robust_stats(solver_name, sim.params, "[run_single:robust]", k_val=k_val)
+    steps = len(sim.params.reward_history)
+    extras = _collect_extra_fields(solver_name, sim.params, k_val)
+    extras_suffix = f", {', '.join(extras)}" if extras else ""
+    print(
+        f"[run_single:done] solver={solver_name}, k={k_val}, total_reward={total:.4f}, steps={steps}{extras_suffix}",
+        flush=True,
+    )
     return RunResult(solver_name=solver_name, k_val=k_val, params=sim.params, total_reward=total)
 
 
@@ -95,20 +132,30 @@ def run_multi_k(param_file: str, y_prefix: str, solver_classes: Sequence[type], 
     for task_idx, k_val, _p, _y, s, _seed in all_args:
         print(f"  - task#{task_idx} solver={s} k={float(k_val)}", flush=True)
 
-    futures = []
+    future_map: Dict[concurrent.futures.Future, Tuple[int, float, str, str, str, Optional[int]]] = {}
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_concurrency) as executor:
         for args in all_args:
-            futures.append(executor.submit(_universal_worker, args))
+            future = executor.submit(_universal_worker, args)
+            future_map[future] = args
         all_results = []
-        for fut in as_completed(futures):
-            task_idx, params, solver_name = fut.result()
+        for fut in as_completed(future_map):
+            args = future_map[fut]
+            try:
+                task_idx, params, solver_name = fut.result()
+            except Exception as exc:
+                _log_task_error("run_multi_k", args, exc)
+                raise
             all_results.append((task_idx, params, solver_name))
             # Derive k via position in schedule
             k_val = all_args[task_idx][1]
             total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
             steps = len(getattr(params, 'reward_history', []) or [])
-            print(f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}", flush=True)
-            _log_robust_stats(solver_name, params, f"    robust stats (task#{task_idx})", k_val=k_val)
+            extras = _collect_extra_fields(solver_name, params, k_val)
+            extras_suffix = f", {', '.join(extras)}" if extras else ""
+            print(
+                f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}{extras_suffix}",
+                flush=True,
+            )
 
     # Group
     results_dict: Dict[str, List[object]] = {name: [None] * len(k_values) for name in solver_names}
@@ -195,7 +242,12 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             future_map = {executor.submit(_universal_worker, t): t for t in pending_tasks}
             for fut in as_completed(future_map):
-                task_idx, params, solver_name = fut.result()
+                task_args = future_map[fut]
+                try:
+                    task_idx, params, solver_name = fut.result()
+                except Exception as exc:
+                    _log_task_error("run_multi_k_with_cache", task_args, exc)
+                    raise
                 solver_name_mapped, k_idx = index_map[task_idx]
                 results_dict[solver_name_mapped][k_idx] = params
                 # write-through cache
@@ -210,8 +262,12 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                 k_val = pending_tasks[[t[0] for t in pending_tasks].index(task_idx)][1]
                 total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
                 steps = len(getattr(params, 'reward_history', []) or [])
-                print(f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}", flush=True)
-                _log_robust_stats(solver_name, params, f"    robust stats (task#{task_idx})", k_val=k_val)
+                extras = _collect_extra_fields(solver_name, params, k_val)
+                extras_suffix = f", {', '.join(extras)}" if extras else ""
+                print(
+                    f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}{extras_suffix}",
+                    flush=True,
+                )
 
     # fill from cache for existing ones
     for solver_name in solver_names:
@@ -245,7 +301,14 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
     if missing_tasks:
         max_workers = max_concurrency or os.cpu_count()
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for task_idx, params, solver_name in executor.map(_universal_worker, missing_tasks):
+            future_map = {executor.submit(_universal_worker, t): t for t in missing_tasks}
+            for fut in as_completed(future_map):
+                task_args = future_map[fut]
+                try:
+                    task_idx, params, solver_name = fut.result()
+                except Exception as exc:
+                    _log_task_error("run_multi_k_with_cache", task_args, exc)
+                    raise
                 solver_name_mapped, k_idx = missing_index_map[task_idx]
                 results_dict[solver_name_mapped][k_idx] = params
                 # write-through cache
@@ -258,6 +321,13 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                     except (OSError, RuntimeError):
                         pass
                 k_val = k_values[k_idx]
-                _log_robust_stats(solver_name, params, f"    robust stats (task#{task_idx})", k_val=k_val)
+                total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
+                steps = len(getattr(params, 'reward_history', []) or [])
+                extras = _collect_extra_fields(solver_name, params, k_val)
+                extras_suffix = f", {', '.join(extras)}" if extras else ""
+                print(
+                    f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}{extras_suffix}",
+                    flush=True,
+                )
 
     return results_dict

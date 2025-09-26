@@ -14,53 +14,6 @@ from .di import PolicyRegistry
 SOLVER_CHOICES = PolicyRegistry.available_names()
 
 
-def _robust_stats_tuple(params):
-    history = getattr(params, "A_prime_size_history", None)
-    if not history:
-        return None
-    avg_size = sum(history) / len(history)
-    max_size = max(history)
-    return avg_size, max_size
-
-
-def _print_robust_stats_single(params) -> None:
-    stats = _robust_stats_tuple(params)
-    if not stats:
-        return
-    avg_size, max_size = stats
-    m_val = getattr(params, "m", None)
-    m_suffix = f", m={m_val}" if m_val is not None else ""
-    print(f"Robust A_prime_size_history avg={avg_size:.2f}, max={max_size}{m_suffix}")
-
-
-def _print_robust_stats_multi(plist) -> None:
-    if not plist:
-        return
-    entries = []
-    for idx, params in enumerate(plist):
-        if params is None:
-            continue
-        stats = _robust_stats_tuple(params)
-        if not stats:
-            continue
-        avg_size, max_size = stats
-        k_values = getattr(params, "k", None)
-        k_repr = None
-        if k_values is not None:
-            try:
-                if len(k_values) > idx:
-                    k_repr = float(k_values[idx])
-            except (TypeError, ValueError):
-                k_repr = k_values[idx] if len(k_values) > idx else None
-        if k_repr is None:
-            k_repr = idx
-        m_val = getattr(params, "m", None)
-        m_suffix = f", m={m_val}" if m_val is not None else ""
-        entries.append(f"k={k_repr}: avg={avg_size:.2f}, max={max_size}{m_suffix}")
-    if entries:
-        print("Robust A_prime_size_history stats -> " + "; ".join(entries))
-
-
 def main():
     parser = argparse.ArgumentParser(
         prog="rabbi",
@@ -128,19 +81,6 @@ def main():
 
     if args.cmd == "single":
         res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed, k_val=args.k, debug=args.debug)
-        no_sell_cnt = getattr(res.params, 'no_sell_cnt', None)
-        msg = None
-        if no_sell_cnt is not None:
-            msg = f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}, no_sell_cnt={no_sell_cnt}"
-        else:
-            msg = f"solver={res.solver_name}, k={res.k_val}, total_reward={res.total_reward}"
-        if args.solver == "Robust":
-            m_val = getattr(res.params, "m", None)
-            if m_val is not None:
-                msg += f", m={m_val}"
-        print(msg)
-        if args.solver == "Robust":
-            _print_robust_stats_single(res.params)
     elif args.cmd == "multi":
         # Dynamically resolve solver classes by name from local solver module
         from . import solver as solver_mod
@@ -150,8 +90,6 @@ def main():
         for name, plist in results.items():
             totals = [sum(p.reward_history) for p in plist]
             print(name, totals)
-            if name == "Robust":
-                _print_robust_stats_multi(plist)
         if args.plots:
             viz = Visualizer()
             viz.generate_plots(results, args.plots, args.save_dir, file_prefix=args.save_prefix)
@@ -166,8 +104,6 @@ def main():
         for name, plist in results.items():
             totals = [sum(p.reward_history) if p is not None else None for p in plist]
             print(name, totals)
-            if name == "Robust":
-                _print_robust_stats_multi(plist)
         if args.plots:
             viz = Visualizer()
             viz.generate_plots(results, args.plots, args.save_dir, file_prefix=args.save_prefix)
