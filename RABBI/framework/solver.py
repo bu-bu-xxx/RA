@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import linprog, minimize
 
 
-def _format_prices_vec(vec):
+def _format_prices_vec(vec, mask=None):
     def _fmt(x):
         xv = float(x)
         xr = round(xv)
@@ -11,7 +11,15 @@ def _format_prices_vec(vec):
         s = ("{:f}".format(xv)).rstrip('0').rstrip('.')
         return s or "0"
     arr = np.asarray(vec).tolist()
-    return "[" + " ".join(_fmt(v) for v in arr) + "]"
+    if mask is None:
+        return "[" + " ".join(_fmt(v) for v in arr) + "]"
+    entries = []
+    for offered, value in zip(mask, arr):
+        if not offered:
+            entries.append("--")
+        else:
+            entries.append(_fmt(value))
+    return "[" + " ".join(entries) + "]"
 
 class LPBasedPolicy:
     def __init__(self, env):
@@ -61,7 +69,9 @@ class RABBI(LPBasedPolicy):
             j = Y[t, alpha]
             if getattr(self, 'debug', False):
                 sel_prices = env.params.f[:, alpha]
-                print(f"[RABBI] t={t} b={b} alpha={alpha} j={j} max_x={x_t[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices)}")
+                sel_mask = getattr(env.params, 'offer_mask', None)
+                col_mask = sel_mask[:, alpha] if sel_mask is not None else None
+                print(f"[RABBI] t={t} b={b} alpha={alpha} j={j} max_x={x_t[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
             env.step(j, alpha)
             b = env.params.b.copy()
 
@@ -86,7 +96,9 @@ class OFFline(LPBasedPolicy):
             j = Y[t, alpha]
             if getattr(self, 'debug', False):
                 sel_prices = env.params.f[:, alpha]
-                print(f"[OFFline] t={t} b={b} alpha={alpha} j={j} max_x={x_t[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices)}")
+                sel_mask = getattr(env.params, 'offer_mask', None)
+                col_mask = sel_mask[:, alpha] if sel_mask is not None else None
+                print(f"[OFFline] t={t} b={b} alpha={alpha} j={j} max_x={x_t[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
             env.step(j, alpha)
             b = env.params.b.copy()
 
@@ -106,12 +118,28 @@ class NPlusOneLP(LPBasedPolicy):
         self.A = env.params.A
         self.T = env.params.T
         self.env = env
+        allow_skip = getattr(env.params, 'allow_skip', None)
+        if allow_skip is None:
+            allow_skip = np.zeros(self.n, dtype=bool)
+        self.allow_skip = np.array(allow_skip, dtype=bool)
 
     @staticmethod
-    def mnl_demand(prices, d, mu, u0=0, gamma=1.0):
-        exponents = np.exp((np.array(d) - np.array(prices)) / mu)
-        denominator = np.sum(exponents) + np.exp(u0 / mu)
-        return gamma * exponents / denominator
+    def mnl_demand(prices, d, mu, u0=0, gamma=1.0, offer_mask=None):
+        prices = np.array(prices, dtype=float)
+        if offer_mask is None:
+            offer_mask = np.ones_like(prices, dtype=bool)
+        else:
+            offer_mask = np.array(offer_mask, dtype=bool)
+        exponents = np.zeros_like(prices, dtype=float)
+        active = offer_mask
+        if np.any(active):
+            exponents[active] = np.exp((np.array(d)[active] - prices[active]) / mu)
+        denominator = np.sum(exponents[active]) + np.exp(u0 / mu)
+        if denominator == 0:
+            return np.zeros_like(prices, dtype=float)
+        probabilities = np.zeros_like(prices, dtype=float)
+        probabilities[active] = gamma * exponents[active] / denominator
+        return probabilities
 
     @staticmethod
     def _debug_print(debug_tag, debug, *args, **kwargs):
@@ -119,15 +147,84 @@ class NPlusOneLP(LPBasedPolicy):
             print(f"[{debug_tag}]", *args, **kwargs)
 
     @staticmethod
-    def solve_continuous_relaxation(price_grid, d_attract, mu, u0, gamma, A, b, T, t, debug=False, debug_tag="solve_continuous_relaxation"):
+    def _neighbor_key(prices, mask):
+        prices = np.asarray(prices, dtype=float)
+        mask = np.asarray(mask, dtype=bool)
+        rounded = tuple(np.round(prices.tolist(), 9))
+        mask_tuple = tuple(bool(x) for x in mask.tolist())
+        return rounded, mask_tuple
+
+    def _expand_with_skips(self, base_prices):
+        neighbors = []
+        seen = set()
+
+        base_prices = np.asarray(base_prices, dtype=float)
+
+        def recurse(idx, price_acc, mask_acc):
+            if idx == self.n:
+                prices_arr = np.array(price_acc, dtype=float)
+                mask_arr = np.array(mask_acc, dtype=bool)
+                key = self._neighbor_key(prices_arr, mask_arr)
+                if key not in seen:
+                    seen.add(key)
+                    neighbors.append((prices_arr, mask_arr))
+                return
+
+            # Offered option
+            price_acc.append(base_prices[idx])
+            mask_acc.append(True)
+            recurse(idx + 1, price_acc, mask_acc)
+            price_acc.pop()
+            mask_acc.pop()
+
+            # Skip option if allowed
+            if self.allow_skip[idx]:
+                price_acc.append(0.0)
+                mask_acc.append(False)
+                recurse(idx + 1, price_acc, mask_acc)
+                price_acc.pop()
+                mask_acc.pop()
+
+        recurse(0, [], [])
+        return neighbors
+
+    @staticmethod
+    def _dedupe_neighbors(neighbors):
+        deduped = []
+        seen = set()
+        for prices, mask in neighbors:
+            key = NPlusOneLP._neighbor_key(prices, mask)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append((np.array(prices, dtype=float), np.array(mask, dtype=bool)))
+        return deduped
+
+    @staticmethod
+    def solve_continuous_relaxation(price_grid, d_attract, mu, u0, gamma, A, b, T, t, allow_skip=None, debug=False, debug_tag="solve_continuous_relaxation"):
+        if allow_skip is None:
+            allow_skip = np.zeros(len(price_grid), dtype=bool)
+        allow_skip = np.array(allow_skip, dtype=bool)
+
+        bounds = []
+        x0 = []
+        for idx, prices in enumerate(price_grid):
+            prices = np.asarray(prices, dtype=float)
+            lower = float(np.min(prices))
+            upper = float(np.max(prices))
+            span = max(upper - lower, 1.0)
+            if allow_skip[idx]:
+                upper += max(10.0, span * 5.0)
+            bounds.append((lower, upper))
+            x0.append(float(np.clip(np.mean(prices), lower, upper)))
+
         def objective(p):
             demand = NPlusOneLP.mnl_demand(p, d_attract, mu, u0, gamma)
             return -np.dot(p, demand)
+
         def constraint(p):
             demand = NPlusOneLP.mnl_demand(p, d_attract, mu, u0, gamma)
             return b/(T-t) - A.T @ demand
-        bounds = [(min(prices), max(prices)) for prices in price_grid]
-        x0 = [np.mean(prices[:-1]) for prices in price_grid]
         cons = [{'type': 'ineq', 'fun': constraint}]
         res = minimize(objective, x0, bounds=bounds, constraints=cons, options={'maxiter': 10000})
         if not res.success:
@@ -148,8 +245,7 @@ class NPlusOneLP(LPBasedPolicy):
             relative_positions.append(relative_pos)
         return relative_positions
 
-    @staticmethod
-    def find_neighbors(p_star, price_grid, n, debug=False, debug_tag="find_neighbors"):
+    def find_neighbors(self, p_star, price_grid, n, debug=False, debug_tag="find_neighbors"):
         lower_bounds = []
         upper_bounds = []
         for i in range(n):
@@ -158,47 +254,52 @@ class NPlusOneLP(LPBasedPolicy):
             upper = min([p for p in prices if p >= p_star[i]], default=max(prices))
             lower_bounds.append(lower)
             upper_bounds.append(upper)
-        relative_positions = NPlusOneLP.get_relative_position(p_star, price_grid, n)
+
+        relative_positions = self.get_relative_position(p_star, price_grid, n)
         sorted_indices = sorted(range(n), key=lambda i: relative_positions[i], reverse=True)
-        neighbors = []
-        base_neighbor = lower_bounds.copy()
-        neighbors.append(base_neighbor)
-        for i in range(1, n+1):
+
+        base_vectors = []
+        base_vectors.append(lower_bounds.copy())
+        for i in range(1, n + 1):
             neighbor = lower_bounds.copy()
             for j in range(i):
                 idx = sorted_indices[j]
                 neighbor[idx] = upper_bounds[idx]
-            neighbors.append(neighbor)
-        unique_neighbors = []
-        seen = set()
-        for neighbor in neighbors:
-            neighbor_tuple = tuple(neighbor)
-            if neighbor_tuple not in seen:
-                seen.add(neighbor_tuple)
-                unique_neighbors.append(neighbor)
-        return unique_neighbors
+            base_vectors.append(neighbor)
+
+        candidates = []
+        for base in base_vectors:
+            candidates.extend(self._expand_with_skips(base))
+
+        neighbors = self._dedupe_neighbors(candidates)
+        self._debug_print(debug_tag, debug, f"generated {len(neighbors)} neighbors")
+        return neighbors
 
     @staticmethod
     def solve_n_plus_one_lp(neighbors, d_attract, mu, u0, gamma, A, d, b, T, t, debug=False, debug_tag="solve_n_plus_one_lp"):
         num_neighbors = len(neighbors)
+        if num_neighbors == 0:
+            return np.zeros(0)
+
         demands = []
         revenues = []
-        for neighbor in neighbors:
-            demand = NPlusOneLP.mnl_demand(neighbor, d_attract, mu, u0, gamma)
+        for prices, mask in neighbors:
+            demand = NPlusOneLP.mnl_demand(prices, d_attract, mu, u0, gamma, offer_mask=mask)
             demands.append(demand)
-            revenues.append(np.dot(neighbor, demand))
+            revenues.append(float(np.dot(prices, demand)))
+
         c = -np.array(revenues)
-        A_ub = []
+        A_ub = np.zeros((d, num_neighbors))
         for k in range(d):
-            row = []
-            for i in range(num_neighbors):
-                resource_consumption = np.dot(A[:, k], demands[i])
-                row.append(resource_consumption)
-            A_ub.append(row)
-        A_eq = [np.ones(num_neighbors)]
+            for idx, demand in enumerate(demands):
+                A_ub[k, idx] = np.dot(A[:, k], demand)
+
+        A_eq = np.ones((1, num_neighbors))
         b_eq = [T - t]
         bounds = [(0, T - t)] * num_neighbors
-        res = linprog(c, A_ub=A_ub, b_ub=b, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs', options={'maxiter': 10000})
+
+        res = linprog(c, A_ub=A_ub, b_ub=b, A_eq=A_eq, b_eq=b_eq, bounds=bounds,
+                      method='highs', options={'maxiter': 10000})
         if not res.success:
             raise ValueError(f"(N+1) LP求解失败: {res.message}")
         return res.x
@@ -206,7 +307,8 @@ class NPlusOneLP(LPBasedPolicy):
     def get_pricing_policy(self):
         p_star = self.solve_continuous_relaxation(
             self.price_grid, self.d_attract, self.mu, self.u0, self.gamma,
-            self.A, self.params.b, self.T, self.params.t, self.debug, "get_pricing_policy_step1"
+            self.A, self.params.b, self.T, self.params.t, self.allow_skip,
+            self.debug, "get_pricing_policy_step1"
         )
         neighbors = self.find_neighbors(p_star, self.price_grid, self.n, self.debug, "get_pricing_policy_step2")
         zeta_star = self.solve_n_plus_one_lp(
@@ -216,13 +318,22 @@ class NPlusOneLP(LPBasedPolicy):
         return neighbors, zeta_star
 
     @staticmethod
-    def map_zeta_to_xt(neighbors, zeta_star, env_f):
-        m = env_f.shape[1]
+    def map_zeta_to_xt(neighbors, zeta_star, env):
+        f_matrix = env.params.f
+        offer_mask_matrix = getattr(env.params, 'offer_mask', None)
+        if offer_mask_matrix is None:
+            offer_mask_matrix = np.ones_like(f_matrix, dtype=bool)
+
+        m = f_matrix.shape[1]
         x_t = np.zeros(m)
-        for neighbor_idx, neighbor in enumerate(neighbors):
-            for idx in range(m):
-                if np.allclose(env_f[:, idx], neighbor):
-                    x_t[idx] = zeta_star[neighbor_idx]
+
+        for neighbor_idx, (prices, mask) in enumerate(neighbors):
+            for col in range(m):
+                col_mask = offer_mask_matrix[:, col]
+                if not np.array_equal(col_mask, mask):
+                    continue
+                if np.allclose(f_matrix[mask, col], prices[mask]):
+                    x_t[col] = zeta_star[neighbor_idx]
                     break
         return x_t
 
@@ -235,12 +346,14 @@ class NPlusOneLP(LPBasedPolicy):
             print(f"[NPlusOneLP] start T={env.params.T} n={env.params.n} m={env.params.m} d={env.params.d} topk=None")
         for t in range(env.params.T):
             neighbors, zeta_star = self.get_pricing_policy()
-            x_t = self.map_zeta_to_xt(neighbors, zeta_star, env.params.f)
+            x_t = self.map_zeta_to_xt(neighbors, zeta_star, env)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
             if getattr(self, 'debug', False):
                 sel_prices = env.params.f[:, alpha]
-                print(f"[NPlusOneLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices)}")
+                sel_mask_matrix = getattr(env.params, 'offer_mask', None)
+                col_mask = sel_mask_matrix[:, alpha] if sel_mask_matrix is not None else None
+                print(f"[NPlusOneLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
             env.step(j, alpha)
             self.params.x_history.append(x_t)
             b = env.params.b.copy()
@@ -267,6 +380,10 @@ class TopKLP(LPBasedPolicy):
         self.p_star_prev = None
         self.zeta_star_prev = None
         self.iteration = 0
+        allow_skip = getattr(env.params, 'allow_skip', None)
+        if allow_skip is None:
+            allow_skip = np.zeros(self.n, dtype=bool)
+        self.allow_skip = np.array(allow_skip, dtype=bool)
 
     def find_neighbors_topk(self, p_star, debug=False, debug_tag="find_neighbors_topk"):
         if self.iteration == 0:
@@ -278,8 +395,50 @@ class TopKLP(LPBasedPolicy):
             full_neighbors = self._get_all_neighbors(p_star, debug, debug_tag)
         return neighbors, full_neighbors
 
-    def _get_all_neighbors(self, p_star, debug=False, debug_tag="get_all_neighbors"):
+    def _expand_with_skips(self, base_prices):
         neighbors = []
+        seen = set()
+        base_prices = np.asarray(base_prices, dtype=float)
+
+        def recurse(idx, price_acc, mask_acc):
+            if idx == self.n:
+                prices_arr = np.array(price_acc, dtype=float)
+                mask_arr = np.array(mask_acc, dtype=bool)
+                key = NPlusOneLP._neighbor_key(prices_arr, mask_arr)
+                if key not in seen:
+                    seen.add(key)
+                    neighbors.append((prices_arr, mask_arr))
+                return
+
+            price_acc.append(base_prices[idx])
+            mask_acc.append(True)
+            recurse(idx + 1, price_acc, mask_acc)
+            price_acc.pop()
+            mask_acc.pop()
+
+            if self.allow_skip[idx]:
+                price_acc.append(0.0)
+                mask_acc.append(False)
+                recurse(idx + 1, price_acc, mask_acc)
+                price_acc.pop()
+                mask_acc.pop()
+
+        recurse(0, [], [])
+        return neighbors
+
+    @staticmethod
+    def _dedupe_neighbors(neighbors):
+        deduped = []
+        seen = set()
+        for prices, mask in neighbors:
+            key = NPlusOneLP._neighbor_key(prices, mask)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append((np.array(prices, dtype=float), np.array(mask, dtype=bool)))
+        return deduped
+
+    def _get_all_neighbors(self, p_star, debug=False, debug_tag="get_all_neighbors"):
         lower_bounds = []
         upper_bounds = []
         for i in range(self.n):
@@ -288,43 +447,54 @@ class TopKLP(LPBasedPolicy):
             upper = min([p for p in prices if p >= p_star[i]], default=max(prices))
             lower_bounds.append(lower)
             upper_bounds.append(upper)
-        for i in range(2**self.n):
-            neighbor = []
+
+        candidates = []
+        for mask_bits in range(2 ** self.n):
+            base = []
             for j in range(self.n):
-                if (i >> j) & 1:
-                    neighbor.append(upper_bounds[j])
+                if (mask_bits >> j) & 1:
+                    base.append(upper_bounds[j])
                 else:
-                    neighbor.append(lower_bounds[j])
-            neighbors.append(neighbor)
+                    base.append(lower_bounds[j])
+            candidates.extend(self._expand_with_skips(base))
+
+        neighbors = self._dedupe_neighbors(candidates)
+        self._debug_print(debug_tag, debug, f"all neighbors={len(neighbors)}")
         return neighbors
 
     def _select_topk_products(self, p_star, debug=False, debug_tag="select_topk_products"):
-        demand_prev = NPlusOneLP.mnl_demand(self.p_star_prev, self.d_attract, self.mu, self.u0, self.gamma)
-        demand_curr = NPlusOneLP.mnl_demand(p_star, self.d_attract, self.mu, self.u0, self.gamma)
+        mask_all = np.ones(self.n, dtype=bool)
+        demand_prev = NPlusOneLP.mnl_demand(self.p_star_prev, self.d_attract, self.mu, self.u0, self.gamma, mask_all)
+        demand_curr = NPlusOneLP.mnl_demand(p_star, self.d_attract, self.mu, self.u0, self.gamma, mask_all)
         demand_changes = np.abs(demand_curr - demand_prev)
         topk_indices = np.argsort(demand_changes)[-self.topk:].tolist()
         return topk_indices
 
     def _get_topk_neighbors(self, p_star, topk_indices, debug=False, debug_tag="get_topk_neighbors"):
-        neighbors = []
         bounds = []
         for i in range(self.n):
             prices = self.price_grid[i]
             lower = max([p for p in prices if p <= p_star[i]], default=min(prices))
             upper = min([p for p in prices if p >= p_star[i]], default=max(prices))
             bounds.append((lower, upper))
-        for i in range(2**self.topk):
-            neighbor = []
+        candidates = []
+        topk_len = len(topk_indices)
+        index_pos = {idx: pos for pos, idx in enumerate(topk_indices)}
+        for mask_bits in range(2 ** topk_len):
+            base = []
             for j in range(self.n):
-                if j in topk_indices:
-                    k_idx = topk_indices.index(j)
-                    if (i >> k_idx) & 1:
-                        neighbor.append(bounds[j][1])
+                if j in index_pos:
+                    pos = index_pos[j]
+                    if (mask_bits >> pos) & 1:
+                        base.append(bounds[j][1])
                     else:
-                        neighbor.append(bounds[j][0])
+                        base.append(bounds[j][0])
                 else:
-                    neighbor.append(bounds[j][0])
-            neighbors.append(neighbor)
+                    base.append(bounds[j][0])
+            candidates.extend(self._expand_with_skips(base))
+
+        neighbors = self._dedupe_neighbors(candidates)
+        self._debug_print(debug_tag, debug, f"topk neighbors={len(neighbors)}")
         return neighbors
 
     def solve_n_plus_one_lp_topk(self, neighbors, full_neighbors, debug=False, debug_tag="solve_n_plus_one_lp_topk"):
@@ -335,15 +505,15 @@ class TopKLP(LPBasedPolicy):
             )
             full_zeta_star = zeta_star
         else:
-            neighbors_dict = {tuple(neighbor): idx for idx, neighbor in enumerate(neighbors)}
+            neighbors_dict = {NPlusOneLP._neighbor_key(prices, mask): idx for idx, (prices, mask) in enumerate(neighbors)}
             used_resources = np.zeros(self.d)
             used_time = 0
-            for i, full_neighbor in enumerate(full_neighbors):
-                full_neighbor_tuple = tuple(full_neighbor)
-                if full_neighbor_tuple not in neighbors_dict:
+            for i, (prices_full, mask_full) in enumerate(full_neighbors):
+                key = NPlusOneLP._neighbor_key(prices_full, mask_full)
+                if key not in neighbors_dict:
                     if self.zeta_star_prev is not None and i < len(self.zeta_star_prev):
                         zeta_prev = self.zeta_star_prev[i]
-                        demand_prev = NPlusOneLP.mnl_demand(full_neighbor, self.d_attract, self.mu, self.u0, self.gamma)
+                        demand_prev = NPlusOneLP.mnl_demand(prices_full, self.d_attract, self.mu, self.u0, self.gamma, mask_full)
                         used_resources += self.A.T @ (zeta_prev * demand_prev)
                         used_time += zeta_prev
             adjusted_b = self.params.b - used_resources
@@ -357,10 +527,10 @@ class TopKLP(LPBasedPolicy):
                     self.A, self.d, adjusted_b, self.T, t_adjusted, debug, debug_tag + "_adjusted"
                 )
             full_zeta_star = np.zeros(len(full_neighbors))
-            for i, full_neighbor in enumerate(full_neighbors):
-                full_neighbor_tuple = tuple(full_neighbor)
-                if full_neighbor_tuple in neighbors_dict:
-                    neighbor_idx = neighbors_dict[full_neighbor_tuple]
+            for i, (prices_full, mask_full) in enumerate(full_neighbors):
+                key = NPlusOneLP._neighbor_key(prices_full, mask_full)
+                if key in neighbors_dict:
+                    neighbor_idx = neighbors_dict[key]
                     full_zeta_star[i] = zeta_star[neighbor_idx]
                 else:
                     if self.zeta_star_prev is not None and i < len(self.zeta_star_prev):
@@ -372,7 +542,8 @@ class TopKLP(LPBasedPolicy):
     def get_pricing_policy(self):
         p_star = NPlusOneLP.solve_continuous_relaxation(
             self.price_grid, self.d_attract, self.mu, self.u0, self.gamma,
-            self.A, self.params.b, self.T, self.params.t, self.debug, "get_pricing_policy_step1"
+            self.A, self.params.b, self.T, self.params.t, self.allow_skip,
+            self.debug, "get_pricing_policy_step1"
         )
         neighbors, full_neighbors = self.find_neighbors_topk(p_star, self.debug, "get_pricing_policy_step2")
         final_neighbors, zeta_star = self.solve_n_plus_one_lp_topk(
@@ -397,12 +568,14 @@ class TopKLP(LPBasedPolicy):
         for t in range(env.params.T):
             self.iteration = t
             neighbors, zeta_star = self.get_pricing_policy()
-            x_t = NPlusOneLP.map_zeta_to_xt(neighbors, zeta_star, env.params.f)
+            x_t = NPlusOneLP.map_zeta_to_xt(neighbors, zeta_star, env)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
             if getattr(self, 'debug', False):
                 sel_prices = env.params.f[:, alpha]
-                print(f"[TopKLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices)}")
+                sel_mask_matrix = getattr(env.params, 'offer_mask', None)
+                col_mask = sel_mask_matrix[:, alpha] if sel_mask_matrix is not None else None
+                print(f"[TopKLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
             env.step(j, alpha)
             env.params.x_history.append(x_t)
             b = env.params.b.copy()
@@ -488,7 +661,7 @@ class Robust(LPBasedPolicy):
         b_eq = [params.T - t]
         bounds = [(0, params.T - t) for _ in range(m)]  # x_α ≥ 0
         res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq,
-                      bounds=bounds, method='highs', options={'maxiter': 10000})
+                      bounds=bounds, method='highs', options={'maxiter': 30000})
         if not res.success:
             self._raise_lp_failure("4", res.message, t)
         return res.x
@@ -607,7 +780,9 @@ class Robust(LPBasedPolicy):
             j = Y[t, alpha]
             if getattr(self, 'debug', False):
                 sel_prices = env.params.f[:, alpha]
-                print(f"[Robust] t={t} b={b} alpha={alpha} j={j} max_x={x_full[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices)}")
+                sel_mask_matrix = getattr(env.params, 'offer_mask', None)
+                col_mask = sel_mask_matrix[:, alpha] if sel_mask_matrix is not None else None
+                print(f"[Robust] t={t} b={b} alpha={alpha} j={j} max_x={x_full[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
 
             # Step 6: simulate and update
             env.step(j, alpha)

@@ -5,9 +5,9 @@ resource_matrix:
   - [0, 1]
   - [1, 1]
 price_set_matrix:
-  - [5, 10, 15, 100000000]
-  - [5, 15, 10000000]
-  - [10, 20, 100000000]
+  - [5, 10, 15, null]
+  - [5, 15, null]
+  - [10, 20, null]
 horizon: 20
 budget: [10, 8]
 scaling_list: [1, 5, 10]

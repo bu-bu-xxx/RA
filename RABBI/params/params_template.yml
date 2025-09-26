@@ -13,11 +13,11 @@ resource_matrix:            # A ∈ R^{n×d}: per-product resource usage (nonneg
   - [1, 1]
 
 # Price grids (per product). Each row P_i is a list of candidate prices.
-# IMPORTANT: The last price in each row should be a large "no-sell" price.
+# Use `null` to indicate that the product may be skipped (no offer) for that menu.
 price_set_matrix:
-  - [5, 10, 15, 100000000]  # P_1 (include a very large no-sell price)
-  - [5, 15, 100000000]      # P_2
-  - [10, 20, 100000000]     # P_3
+  - [5, 10, 15, null]       # P_1 (null = allow skipping the product)
+  - [5, 15, null]           # P_2
+  - [10, 20, null]          # P_3
 
 # Time and budgets
 horizon: 20                 # T: total periods (int)

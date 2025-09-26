@@ -23,10 +23,12 @@ class Parameters:
         self.d = None
         self.A = None
         self.f_split = None
+        self.allow_skip = None
         self.T = None
         self.B = None
         self.k = None
         self.f = None
+        self.offer_mask = None
         self.m = None
         self.demand_model = None
         self.tolerance = None
@@ -59,12 +61,14 @@ class ParamsLoader:
         self.params.n = int(yaml_params['product_number'])
         self.params.d = int(yaml_params['resource_number'])
         self.params.A = np.array(yaml_params['resource_matrix'], dtype=float)
-        self.params.f_split = yaml_params['price_set_matrix']
+        normalized_prices, allow_skip = self._normalize_price_set(yaml_params['price_set_matrix'])
+        self.params.f_split = normalized_prices
+        self.params.allow_skip = np.array(allow_skip, dtype=bool)
         self.params.T = int(yaml_params['horizon'])
         self.params.B = np.array(yaml_params['budget'], dtype=float)
         self.params.k = np.array(yaml_params['scaling_list'], dtype=float)
         self.params.topk = int(yaml_params.get('topk', 10000000))
-        self.params.f = self.generate_price_combinations(self.params.f_split)
+        self.params.f, self.params.offer_mask = self.generate_price_combinations(self.params.f_split, self.params.allow_skip)
         self.params.m = self.params.f.shape[1]
 
         self.check_A_matrix()
@@ -105,11 +109,48 @@ class ParamsLoader:
         else:
             raise NotImplementedError(f'暂不支持的需求模型: {self.params.demand_model}')
 
-    def generate_price_combinations(self, f_split):
-        combos = list(itertools.product(*f_split))
-        f_matrix = np.array(combos, dtype=float)
-        f_matrix = f_matrix.transpose()
-        return f_matrix
+    @staticmethod
+    def _normalize_price_set(raw_price_matrix):
+        normalized = []
+        allow_skip = []
+        for row in raw_price_matrix:
+            row_prices = []
+            skip_flag = False
+            for value in row:
+                if value is None:
+                    skip_flag = True
+                    continue
+                val = float(value)
+                if val >= 1e7:
+                    skip_flag = True
+                    continue
+                row_prices.append(val)
+            if not row_prices:
+                raise ValueError("Every product must have at least one finite price option")
+            normalized.append(row_prices)
+            allow_skip.append(skip_flag)
+        return normalized, allow_skip
+
+    def generate_price_combinations(self, f_split, allow_skip):
+        choice_space = []
+        for i, prices in enumerate(f_split):
+            options = [(float(p), True) for p in prices]
+            if allow_skip[i]:
+                options.append((0.0, False))
+            choice_space.append(options)
+
+        combos = list(itertools.product(*choice_space))
+        n = len(f_split)
+        m = len(combos)
+        f_matrix = np.zeros((n, m), dtype=float)
+        offer_mask = np.zeros((n, m), dtype=bool)
+
+        for col, combo in enumerate(combos):
+            for i, (price, offered) in enumerate(combo):
+                offer_mask[i, col] = offered
+                if offered:
+                    f_matrix[i, col] = price
+        return f_matrix, offer_mask
 
     def check_A_matrix(self):
         if self.params.A.shape != (self.params.n, self.params.d):
@@ -120,10 +161,22 @@ class ParamsLoader:
             raise ValueError("A矩阵所有元素必须为非负数")
 
     @staticmethod
-    def mnl_demand(prices, d, mu, u0=0, gamma=1.0):
-        exponents = np.exp((np.array(d) - np.array(prices)) / mu)
-        denominator = np.sum(exponents) + np.exp(u0 / mu)
-        return gamma * exponents / denominator
+    def mnl_demand(prices, d, mu, u0=0, gamma=1.0, offer_mask=None):
+        prices = np.array(prices, dtype=float)
+        if offer_mask is None:
+            offer_mask = np.ones_like(prices, dtype=bool)
+        else:
+            offer_mask = np.array(offer_mask, dtype=bool)
+        exponents = np.zeros_like(prices, dtype=float)
+        active = offer_mask
+        if np.any(active):
+            exponents[active] = np.exp((np.array(d)[active] - prices[active]) / mu)
+        denominator = np.sum(exponents[active]) + np.exp(u0 / mu)
+        if denominator == 0:
+            return np.zeros_like(prices, dtype=float)
+        probabilities = np.zeros_like(prices, dtype=float)
+        probabilities[active] = gamma * exponents[active] / denominator
+        return probabilities
 
     @staticmethod
     def linear_demand(prices, psi, theta):
@@ -134,7 +187,8 @@ class ParamsLoader:
         p_matrix = np.zeros((n, m))
         for j in range(m):
             prices = self.params.f[:, j]
-            p_matrix[:, j] = self.mnl_demand(prices, d, mu, u0, gamma)
+            mask = self.params.offer_mask[:, j]
+            p_matrix[:, j] = self.mnl_demand(prices, d, mu, u0, gamma, mask)
         p_matrix[np.abs(p_matrix) < tolerance] = 0
         self.params.p = p_matrix
         return p_matrix
@@ -142,9 +196,12 @@ class ParamsLoader:
     def compute_linear_demand_matrix(self, psi, theta, tolerance=1e-4):
         n, m = self.params.n, self.params.m
         p_matrix = np.zeros((n, m))
+        offer_mask = self.params.offer_mask
         for j in range(m):
             prices = self.params.f[:, j]
-            p_matrix[:, j] = self.linear_demand(prices, psi, theta)
+            demands = self.linear_demand(prices, psi, theta)
+            mask = offer_mask[:, j]
+            p_matrix[:, j] = np.where(mask, demands, 0.0)
         p_matrix[np.abs(p_matrix) < tolerance] = 0
         self.params.p = p_matrix
         return p_matrix
@@ -212,6 +269,18 @@ class DynamicPricingEnv(ParamsLoader):
             raise ValueError("j must be an integer representing the product index or -1.")
         if j < 0 or j >= self.params.n:
             raise ValueError(f"j must be in range [0, {self.params.n - 1}] or -1 (not buy), but got {j}.")
+        offer_mask = getattr(self.params, 'offer_mask', None)
+        is_offered = True if offer_mask is None else bool(offer_mask[j, alpha])
+        if not is_offered:
+            info['sold'] = False
+            self.params.no_sell_cnt += 1
+            self.params.reward_history.append(reward)
+            self.params.b_history.append(self.params.b.copy())
+            self.params.j_history.append(j)
+            self.params.alpha_history.append(alpha)
+            done = done or np.any(self.params.b < 0)
+            return self._get_obs(), reward, done, info
+
         if np.all(self.params.b - self.params.A[j] >= 0):
             self.params.b -= self.params.A[j]
             reward = self.params.f[j, alpha]
