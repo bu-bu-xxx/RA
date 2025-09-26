@@ -435,9 +435,10 @@ class Robust(LPBasedPolicy):
         # math: CanFulfill(b, A_i) = ∧_k [ b_k ≥ A_{i,k} ]
         return np.all(A <= b[None, :], axis=1)
 
-    def _raise_lp_failure(self, step: str, detail: str):
+    def _raise_lp_failure(self, step: str, detail: str, t: int | None = None):
         """New-added function: raise RuntimeError with explicit step id when LP solving fails."""
-        raise RuntimeError(f"[Robust Step {step}] LP solver failed: {detail}")
+        t_suffix = f" at t={t}" if t is not None else ""
+        raise RuntimeError(f"[Robust Step {step}] LP solver{t_suffix} failed: {detail}")
 
     def _filtered_coefficients(self, b: np.ndarray) -> tuple:
         """New-added function: compute r_α and c_{k,α} after feasibility-aware filtering.
@@ -489,7 +490,7 @@ class Robust(LPBasedPolicy):
         res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq,
                       bounds=bounds, method='highs', options={'maxiter': 10000})
         if not res.success:
-            self._raise_lp_failure("4", res.message)
+            self._raise_lp_failure("4", res.message, t)
         return res.x
 
     def _solve_restricted_dual(self, columns: list, r: np.ndarray, C: np.ndarray, b: np.ndarray, t: int) -> tuple:
@@ -523,7 +524,7 @@ class Robust(LPBasedPolicy):
         #               λ ≥ 0,  μ ≥ 0
         res = linprog(c_obj, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs', options={'maxiter': 10000})
         if not res.success:
-            self._raise_lp_failure("3", res.message)
+            self._raise_lp_failure("3", res.message, t)
         z = res.x
         lam = z[:d]
         mu = float(z[d])

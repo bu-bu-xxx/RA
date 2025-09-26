@@ -187,4 +187,12 @@ ls -1 data/pics
 ls -1 data/shelve
 ```
 
+## Troubleshooting
+
+- **ValueError: `x and y must have same first dimension` during cached plot generation** – occurs when cached shelve/Y data from a previous run (with a different `scaling_list`) is reused. Clear cached artifacts before re-running:
+  ```bash
+  rm -rf data/Y/* data/shelve/* data/pics/*
+  ```
+  After clearing, rerun the cache command; the plots will regenerate with matching dimensions.
+
 This mirrors what the tests do in `tests/test_cli_and_multi_smoke.py`.
