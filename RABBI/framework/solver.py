@@ -727,63 +727,93 @@ class Robust(LPBasedPolicy):
             print(f"[Robust] start T={env.params.T} n={env.params.n} m={env.params.m} d={env.params.d} topk={self.topk}")
         self.params.A_prime_size_history = []  # new-add: record |A'_t| for each time t
 
-        for t in range(env.params.T):
-            # Step 1 & 2: feasibility-aware coefficients
-            r_all, C_all = self._filtered_coefficients(b)  # math: r_α, C_{k,α}
+        current_t: int | None = None
+        current_b_snapshot: np.ndarray | None = None
+        current_A_prime_size: int | None = None
+        try:
+            original_m = self.env.params.m
+            for t in range(env.params.T):
+                current_t = t
+                current_b_snapshot = b.copy()
+                current_A_prime_size = 0
+                # Step 1 & 2: feasibility-aware coefficients
+                r_all, C_all = self._filtered_coefficients(b)  # math: r_α, C_{k,α}
 
-            # Step 3: dual-guided column generation
-            A_prime: list[int] = []  # new-add: discovered columns set 𝒜'_t
-            # initialize with best revenue column to seed
-            seed_alpha = int(np.argmax(r_all))
-            A_prime.append(seed_alpha)
+                # ensure null assortment column (all products skipped) exists for feasibility
+                null_alpha = r_all.shape[0]
+                r_all = np.append(r_all, 0.0)
+                C_all = np.concatenate([C_all, np.zeros((C_all.shape[0], 1))], axis=1)
 
-            iter_cnt = 0
-            while True:
-                iter_cnt += 1
-                # solve restricted dual to get (λ, μ)
-                lam, mu = self._solve_restricted_dual(A_prime, r_all, C_all, b, t)  # math: dual prices
-                # separation: compute violations over all α
-                viol, order = self._max_reduced_costs(r_all, C_all, lam, mu)  # math: \bar{c}_α(λ, μ)
-                max_v = float(viol[order[0]]) if order.size else -np.inf
-                if getattr(self, 'debug', False):
-                    print(f"[Robust] t={t} iter={iter_cnt} max_violation={max_v:.6g} |A'|={len(A_prime)}")
-                if max_v <= self.eta:  # math: stop if \tilde{V}(λ, μ) ≤ η
-                    break
-                # add top-k violating columns this iteration
-                added = 0
-                for idx in order:
-                    if viol[idx] <= self.eta:
+                # Step 3: dual-guided column generation
+                A_prime: list[int] = []  # new-add: discovered columns set 𝒜'_t
+                # initialize with best revenue column to seed
+                if original_m > 0:
+                    seed_alpha = int(np.argmax(r_all[:original_m]))
+                    A_prime.append(seed_alpha)
+                A_prime.append(null_alpha)
+                current_A_prime_size = len(A_prime)
+
+                iter_cnt = 0
+                while True:
+                    iter_cnt += 1
+                    # solve restricted dual to get (λ, μ)
+                    lam, mu = self._solve_restricted_dual(A_prime, r_all, C_all, b, t)  # math: dual prices
+                    # separation: compute violations over all α
+                    viol, order = self._max_reduced_costs(r_all, C_all, lam, mu)  # math: \bar{c}_α(λ, μ)
+                    max_v = float(viol[order[0]]) if order.size else -np.inf
+                    if getattr(self, 'debug', False):
+                        print(f"[Robust] t={t} iter={iter_cnt} max_violation={max_v:.6g} |A'|={len(A_prime)}")
+                    if max_v <= self.eta:  # math: stop if \tilde{V}(λ, μ) ≤ η
                         break
-                    if idx not in A_prime:
-                        A_prime.append(int(idx))
-                        added += 1
-                        if added >= self.topk:
+                    # add top-k violating columns this iteration
+                    added = 0
+                    for idx in order:
+                        if idx == null_alpha:
+                            continue
+                        if viol[idx] <= self.eta:
                             break
-                # guard
-                if added == 0:
-                    break
-                # optional max iterations to avoid pathological loops
-                if iter_cnt > 5000:
-                    break
+                        if idx not in A_prime:
+                            A_prime.append(int(idx))
+                            added += 1
+                            current_A_prime_size = len(A_prime)
+                            if added >= self.topk:
+                                break
+                    # guard
+                    if added == 0:
+                        break
+                    # optional max iterations to avoid pathological loops
+                    if iter_cnt > 5000:
+                        break
 
-            self.params.A_prime_size_history.append(len(A_prime))  # new-add: store discovered column count |A'_t|
-            # Step 4: solve restricted primal to get scores x on A'
-            x_sub = self._solve_restricted_primal(A_prime, b, r_all, C_all, t)  # math: x^{(t)}
-            # expand to full m with zeros as required
-            x_full = np.zeros(self.env.params.m)
-            for i, alpha in enumerate(A_prime):
-                x_full[alpha] = x_sub[i]
-            env.params.x_history.append(x_full)
+                current_A_prime_size = len(A_prime)
+                self.params.A_prime_size_history.append(len(A_prime))  # new-add: store discovered column count |A'_t|
+                # Step 4: solve restricted primal to get scores x on A'
+                x_sub = self._solve_restricted_primal(A_prime, b, r_all, C_all, t)  # math: x^{(t)}
+                # expand to full m with zeros as required
+                x_full = np.zeros(self.env.params.m)
+                for i, alpha in enumerate(A_prime):
+                    if alpha < original_m:
+                        x_full[alpha] = x_sub[i]
+                env.params.x_history.append(x_full)
 
-            # Step 5: choose menu with largest score among feasible ones
-            alpha = int(np.argmax(x_full))  # math: α_t ∈ argmax score(α)
-            j = Y[t, alpha]
-            if getattr(self, 'debug', False):
-                sel_prices = env.params.f[:, alpha]
-                sel_mask_matrix = getattr(env.params, 'offer_mask', None)
-                col_mask = sel_mask_matrix[:, alpha] if sel_mask_matrix is not None else None
-                print(f"[Robust] t={t} b={b} alpha={alpha} j={j} max_x={x_full[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
+                # Step 5: choose menu with largest score among feasible ones
+                alpha = int(np.argmax(x_full))  # math: α_t ∈ argmax score(α)
+                j = Y[t, alpha]
+                if getattr(self, 'debug', False):
+                    sel_prices = env.params.f[:, alpha]
+                    sel_mask_matrix = getattr(env.params, 'offer_mask', None)
+                    col_mask = sel_mask_matrix[:, alpha] if sel_mask_matrix is not None else None
+                    print(f"[Robust] t={t} b={b} alpha={alpha} j={j} max_x={x_full[alpha]:.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
 
-            # Step 6: simulate and update
-            env.step(j, alpha)
-            b = env.params.b.copy()
+                # Step 6: simulate and update
+                env.step(j, alpha)
+                b = env.params.b.copy()
+        except Exception:
+            t_repr = current_t if current_t is not None else "unknown"
+            if current_b_snapshot is None:
+                b_repr = "unknown"
+            else:
+                b_repr = np.array2string(current_b_snapshot, precision=6, separator=', ')
+            a_repr = current_A_prime_size if current_A_prime_size is not None else "unknown"
+            print(f"[Robust:error_state] t={t_repr} b={b_repr} A_prime_size={a_repr}", flush=True)
+            raise
