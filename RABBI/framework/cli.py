@@ -60,6 +60,7 @@ def main():
     p_cache.add_argument("--max-concurrency", type=int, default=None)
     p_cache.add_argument("--seed", type=int, default=42)
     p_cache.add_argument("--shelve-dir", default="data/shelve")
+    p_cache.add_argument("--shelve-prefix", default="", help="Optional prefix for shelve filenames, e.g. 'exp1_'")
     p_cache.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
     p_cache.add_argument("--save-dir", default="data/pics")
     p_cache.add_argument("--save-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
@@ -97,7 +98,8 @@ def main():
         from . import solver as solver_mod
         solver_classes = [getattr(solver_mod, name) for name in args.solvers]
         os.makedirs(args.shelve_dir, exist_ok=True)
-        shelve_paths = {name: os.path.join(args.shelve_dir, f"params_{name.lower()}.shelve") for name in args.solvers}
+        prefix = args.shelve_prefix or ""
+        shelve_paths = {name: os.path.join(args.shelve_dir, f"{prefix}params_{name.lower()}.shelve") for name in args.solvers}
         results = run_multi_k_with_cache(args.param, args.y_prefix, solver_classes,
                                          max_concurrency=args.max_concurrency, seed=args.seed,
                                          shelve_paths=shelve_paths)

@@ -2,9 +2,13 @@
 Preserves existing behavior without renaming functions.
 """
 from typing import Dict, List, Optional, Sequence, Tuple
+import copy
 import os
 import concurrent.futures
 from concurrent.futures import as_completed
+
+import json
+import yaml
 
 from .di import Container
 from .results import RunResult, compute_total_reward
@@ -56,6 +60,64 @@ def _log_task_error(context: str, task_args: Tuple[int, float, str, str, str, Op
     description = _describe_task(task_args)
     detail = _extract_error_detail(exc)
     print(f"[{context}:error] {description} failed: {detail}", flush=True)
+
+
+def _normalize_k_value(k_val: float) -> str:
+    try:
+        k_float = float(k_val)
+    except (TypeError, ValueError):
+        return str(k_val)
+    if k_float.is_integer():
+        return str(int(k_float))
+    normalized = f"{k_float:.10f}".rstrip("0").rstrip(".")
+    return normalized
+
+
+def _cache_key_for_k(k_val: float) -> str:
+    return f"params_{_normalize_k_value(k_val)}"
+
+
+def _strip_scaling_list_from_config(config_data):
+    if not isinstance(config_data, dict):
+        return config_data
+    sanitized = dict(config_data)
+    sanitized.pop("scaling_list", None)
+    return sanitized
+
+
+def _load_config_data(param_file: str):
+    try:
+        with open(param_file, "r", encoding="utf-8") as fp:
+            raw = yaml.safe_load(fp) or {}
+    except FileNotFoundError:
+        return {}
+    return _strip_scaling_list_from_config(raw)
+
+
+def _compute_config_signature_from_data(config_data) -> str:
+    return json.dumps(config_data, sort_keys=True, ensure_ascii=False)
+
+
+def _entry_config_signature(entry) -> Optional[str]:
+    if not isinstance(entry, dict):
+        return None
+    if "config" not in entry:
+        return None
+    return _compute_config_signature_from_data(entry["config"])
+
+
+def _entry_matches_signature(entry, signature: str) -> bool:
+    entry_sig = _entry_config_signature(entry)
+    if entry_sig is None:
+        return False
+    return entry_sig == signature
+
+
+def _prepare_cache_entry(params, config_data) -> Dict[str, object]:
+    stored_params = copy.deepcopy(params)
+    if hasattr(stored_params, "k"):
+        stored_params.k = None
+    return {"params": stored_params, "config": copy.deepcopy(config_data)}
 
 
 def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
@@ -190,6 +252,8 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
     container = Container(param_file, seed=seed, y_prefix=y_prefix)
     sim = container.make_sim()
     k_values = sim.params.k
+    config_data = _load_config_data(param_file)
+    config_signature = _compute_config_signature_from_data(config_data)
 
     solver_names = [cls.__name__ for cls in solver_classes]
     shelve_paths = shelve_paths or {}
@@ -211,11 +275,15 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
         try:
             with shelve.open(shelve_path, flag='c') as db:
                 for k_idx, k_val in enumerate(k_values):
-                    key = f"params_{int(k_val)}"
-                    if key in db:
-                        # cached: no task
+                    key = _cache_key_for_k(k_val)
+                    entry = db.get(key)
+                    if _entry_matches_signature(entry, config_signature):
                         continue
-                    else:
+                    if entry is not None:
+                        try:
+                            del db[key]
+                        except Exception:
+                            pass
                         index_map[task_ptr] = (solver_name, k_idx)
                         pending_tasks.append((task_ptr, k_val, param_file, y_prefix, solver_name, seed))
                         task_ptr += 1
@@ -229,6 +297,8 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
     # run pending
     results_dict: Dict[str, List[object]] = {name: [None] * len(k_values) for name in solver_names}
 
+    failed_entries: set[Tuple[str, int]] = set()
+
     if pending_tasks:
         total_tasks = len(pending_tasks)
         print(
@@ -239,6 +309,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
         for task_idx, k_val, _p, _y, s, _seed in pending_tasks:
             print(f"  - task#{task_idx} solver={s} k={float(k_val)} (scheduled)", flush=True)
         max_workers = max_concurrency or os.cpu_count()
+        task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _y, solver_name, _seed in pending_tasks}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             future_map = {executor.submit(_universal_worker, t): t for t in pending_tasks}
             for fut in as_completed(future_map):
@@ -247,19 +318,23 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                     task_idx, params, solver_name = fut.result()
                 except Exception as exc:
                     _log_task_error("run_multi_k_with_cache", task_args, exc)
-                    raise
+                    solver_name_mapped, k_idx = index_map[task_args[0]]
+                    failed_entries.add((solver_name_mapped, k_idx))
+                    continue
                 solver_name_mapped, k_idx = index_map[task_idx]
+                if hasattr(params, "k"):
+                    params.k = k_values
                 results_dict[solver_name_mapped][k_idx] = params
                 # write-through cache
                 shelve_path = shelve_paths.get(solver_name_mapped)
                 if shelve_path:
                     try:
                         with shelve.open(shelve_path, flag='c') as db:
-                            key = f"params_{int(k_values[k_idx])}"
-                            db[key] = params
+                            key = _cache_key_for_k(k_values[k_idx])
+                            db[key] = _prepare_cache_entry(params, config_data)
                     except (OSError, RuntimeError):
                         pass
-                k_val = pending_tasks[[t[0] for t in pending_tasks].index(task_idx)][1]
+                k_val, _ = task_info_by_idx.get(task_idx, (k_values[k_idx], solver_name_mapped))
                 total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
                 steps = len(getattr(params, 'reward_history', []) or [])
                 extras = _collect_extra_fields(solver_name, params, k_val)
@@ -277,10 +352,15 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
         try:
             with shelve.open(shelve_path, flag='r') as db:
                 for k_idx, k_val in enumerate(k_values):
-                    key = f"params_{int(k_val)}"
-                    if results_dict[solver_name][k_idx] is None and key in db:
+                    if results_dict[solver_name][k_idx] is None:
+                        key = _cache_key_for_k(k_val)
+                        entry = db.get(key)
+                        if not _entry_matches_signature(entry, config_signature):
+                            continue
                         try:
-                            results_dict[solver_name][k_idx] = db[key]
+                            cached_params = entry["params"]
+                            setattr(cached_params, "k", k_values)
+                            results_dict[solver_name][k_idx] = cached_params
                         except (OSError, RuntimeError, KeyError, ModuleNotFoundError, AttributeError):
                             # Leave as None to be recomputed in fallback below
                             pass
@@ -293,13 +373,14 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
     miss_ptr = 0
     for solver_name in solver_names:
         for k_idx, k_val in enumerate(k_values):
-            if results_dict[solver_name][k_idx] is None:
+            if results_dict[solver_name][k_idx] is None and (solver_name, k_idx) not in failed_entries:
                 missing_index_map[miss_ptr] = (solver_name, k_idx)
                 missing_tasks.append((miss_ptr, float(k_val), param_file, y_prefix, solver_name, seed))
                 miss_ptr += 1
 
     if missing_tasks:
         max_workers = max_concurrency or os.cpu_count()
+        task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _y, solver_name, _seed in missing_tasks}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             future_map = {executor.submit(_universal_worker, t): t for t in missing_tasks}
             for fut in as_completed(future_map):
@@ -308,19 +389,23 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                     task_idx, params, solver_name = fut.result()
                 except Exception as exc:
                     _log_task_error("run_multi_k_with_cache", task_args, exc)
-                    raise
+                    solver_name_mapped, k_idx = missing_index_map[task_args[0]]
+                    failed_entries.add((solver_name_mapped, k_idx))
+                    continue
                 solver_name_mapped, k_idx = missing_index_map[task_idx]
+                if hasattr(params, "k"):
+                    params.k = k_values
                 results_dict[solver_name_mapped][k_idx] = params
                 # write-through cache
                 shelve_path = shelve_paths.get(solver_name_mapped)
                 if shelve_path:
                     try:
                         with shelve.open(shelve_path, flag='c') as db:
-                            key = f"params_{int(k_values[k_idx])}"
-                            db[key] = params
+                            key = _cache_key_for_k(k_values[k_idx])
+                            db[key] = _prepare_cache_entry(params, config_data)
                     except (OSError, RuntimeError):
                         pass
-                k_val = k_values[k_idx]
+                k_val, _ = task_info_by_idx.get(task_idx, (k_values[k_idx], solver_name_mapped))
                 total = float(sum(getattr(params, 'reward_history', []) or [0.0]))
                 steps = len(getattr(params, 'reward_history', []) or [])
                 extras = _collect_extra_fields(solver_name, params, k_val)
