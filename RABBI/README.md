@@ -27,6 +27,13 @@ Notes:
 
 ## Quick Start
 
+Install the Python dependencies first:
+
+```bash
+cd RABBI
+python3 -m pip install -r requirements.txt
+```
+
 Create folders for data and pics (if not present):
 
 ```bash
