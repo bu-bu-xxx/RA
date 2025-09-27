@@ -83,7 +83,7 @@ def test_cli_multi_plots_and_cache_smoke():
         "multi_k_ratio",
         "multi_k_regret",
         "lp_x_benchmark_ratio",
-        "--save-dir",
+    "--plot-dir",
         pics_dir,
     ]
     # Run from repo root so module resolution works
@@ -120,7 +120,7 @@ def test_cli_multi_plots_and_cache_smoke():
         shelve_dir,
         "--plots",
         "multi_k_results",
-        "--save-dir",
+    "--plot-dir",
         pics_dir,
     ]
     proc2 = subprocess.run(cmd_cache, cwd=REFAC_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

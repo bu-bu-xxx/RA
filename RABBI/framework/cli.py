@@ -43,8 +43,8 @@ def main():
     p_multi.add_argument("--max-concurrency", type=int, default=None)
     p_multi.add_argument("--seed", type=int, default=42)
     p_multi.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
-    p_multi.add_argument("--save-dir", default="data/pics")
-    p_multi.add_argument("--save-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
+    p_multi.add_argument("--plot-dir", default="data/pics")
+    p_multi.add_argument("--plot-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
 
     p_cache = sub.add_parser("cache")
     p_cache.add_argument("--param", required=True)
@@ -62,8 +62,8 @@ def main():
     p_cache.add_argument("--shelve-dir", default="data/shelve")
     p_cache.add_argument("--shelve-prefix", default="", help="Optional prefix for shelve filenames, e.g. 'exp1_'")
     p_cache.add_argument("--plots", nargs="*", default=[], help="Plot keys: multi_k_results, multi_k_ratio, multi_k_regret, lp_x_benchmark_ratio")
-    p_cache.add_argument("--save-dir", default="data/pics")
-    p_cache.add_argument("--save-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
+    p_cache.add_argument("--plot-dir", default="data/pics")
+    p_cache.add_argument("--plot-prefix", default="", help="Optional filename prefix for saved plot images, e.g. 'exp1_'")
 
     p_clear = sub.add_parser("clear-cache")
     p_clear.add_argument(
@@ -93,7 +93,7 @@ def main():
             print(name, totals)
         if args.plots:
             viz = Visualizer()
-            viz.generate_plots(results, args.plots, args.save_dir, file_prefix=args.save_prefix)
+            viz.generate_plots(results, args.plots, args.plot_dir, file_prefix=args.plot_prefix)
     elif args.cmd == "cache":
         from . import solver as solver_mod
         solver_classes = [getattr(solver_mod, name) for name in args.solvers]
@@ -108,7 +108,7 @@ def main():
             print(name, totals)
         if args.plots:
             viz = Visualizer()
-            viz.generate_plots(results, args.plots, args.save_dir, file_prefix=args.save_prefix)
+            viz.generate_plots(results, args.plots, args.plot_dir, file_prefix=args.plot_prefix)
     elif args.cmd == "clear-cache":
         os.makedirs(args.shelve_dir, exist_ok=True)
         # Accept arbitrary solver names; if none provided, use standard set

@@ -56,8 +56,8 @@ python3 -m cli multi \
   --y-prefix data/Y/Y_matrix_params5 \
   --solvers OFFline NPlusOneLP Robust \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
-  --save-dir data/pics \
-  --save-prefix exp1_
+  --plot-dir data/pics \
+  --plot-prefix exp1_
 ```
 
 ### Multi-k with cache
@@ -72,8 +72,8 @@ python3 -m cli cache \
   --max-concurrency 4 \
   --shelve-dir data/shelve \
   --plots multi_k_results multi_k_ratio \
-  --save-dir data/pics \
-  --save-prefix exp1_
+  --plot-dir data/pics \
+  --plot-prefix exp1_
 ```
 
 ### Available solvers and CLI help
@@ -88,11 +88,16 @@ python3 -m cli multi -h
 
 Available solver names: RABBI, OFFline, NPlusOneLP, TopKLP, Robust
 
-### Plot filename prefix
+### Plot output options
 
-- Use `--save-prefix <prefix>` to prepend a prefix to generated image filenames.
+- Use `--plot-prefix <prefix>` to prepend a prefix to generated image filenames.
+- Use `--plot-dir <path>` to choose where plot images are written (defaults to `data/pics`).
 - Example outputs: `exp1_multi_k_results.png`, `exp1_multi_k_ratio_results.png`,
   `exp1_multi_k_regret_results.png`, `exp1_lp_x_benchmark_ratio_vs_k.png`.
+
+### Cache filename prefix
+
+- Use `--shelve-prefix <prefix>` (in `cache` mode) to prepend a prefix to the generated shelve cache filenames.
 
 ### Logging / Progress
 
@@ -171,7 +176,7 @@ python3 -m cli multi \
   --y-prefix data/Y/Y_matrix_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP Robust \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
-  --save-dir data/pics
+  --plot-dir data/pics
 
 # Cache mode to create shelve artifacts
 python3 -m cli cache \
@@ -180,7 +185,7 @@ python3 -m cli cache \
   --solvers RABBI OFFline NPlusOneLP TopKLP Robust \
   --shelve-dir data/shelve \
   --plots multi_k_results \
-  --save-dir data/pics
+  --plot-dir data/pics
 
 # Expected outputs
 ls -1 data/pics
