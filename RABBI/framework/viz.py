@@ -12,6 +12,34 @@ class Visualizer:
     def __init__(self):
         pass
 
+    @staticmethod
+    def _extract_reward_entries(params_list: List[object]) -> List[tuple]:
+        entries: List[tuple] = []
+        if not params_list:
+            return entries
+        k_values = None
+        for p in params_list:
+            if p is not None and hasattr(p, "k"):
+                k_values = list(p.k)
+                break
+        if k_values is None:
+            k_values = list(range(len(params_list)))
+        for idx, (k_val, params) in enumerate(zip(k_values, params_list)):
+            if params is None:
+                continue
+            rewards = getattr(params, "reward_history", None)
+            if rewards is None:
+                continue
+            entries.append((idx, float(k_val), float(sum(rewards))))
+        return entries
+
+    @staticmethod
+    def _prepare_series(entries: List[tuple]) -> tuple:
+        if not entries:
+            return [], []
+        _, ks, rewards = zip(*entries)
+        return list(ks), list(rewards)
+
     def plot_multi_k_results(self, rabbi_params, offline_params, nplus1_params, topklp_params, robust_params=None, save_path=None, show_plot=False):
         series = [
             ("RABBI", rabbi_params, "o"),
@@ -21,21 +49,15 @@ class Visualizer:
             ("Robust", robust_params, "x"),
         ]
 
-        k_list = None
-        for _, params, _ in series:
-            if params is not None and len(params) > 0:
-                k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
-                break
-        if k_list is None:
-            print("Warning: No valid params provided for plotting")
-            return
-
         plt.figure(figsize=(8, 6))
         for label, params, marker in series:
             if params is None:
                 continue
-            rewards = [sum(p.reward_history) for p in params]
-            plt.plot(k_list, rewards, marker=marker, label=label)
+            entries = self._extract_reward_entries(params)
+            ks, rewards = self._prepare_series(entries)
+            if not ks:
+                continue
+            plt.plot(ks, rewards, marker=marker, label=label)
 
         plt.xlabel('k (scaling factor)')
         plt.ylabel('Total Reward')
@@ -58,24 +80,32 @@ class Visualizer:
             ("Robust", robust_params, "x"),
         ]
 
-        k_list = None
-        for _, params, _ in [("OFFline", offline_params, "s")] + series:
-            if params is not None and len(params) > 0:
-                k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
-                break
-        if k_list is None:
-            raise ValueError("No valid params provided for plotting")
         if offline_params is None:
             raise ValueError("offline_params is None, cannot compute ratios")
 
-        offline_rewards = [sum(p.reward_history) for p in offline_params]
+        offline_entries = self._extract_reward_entries(offline_params)
+        if not offline_entries:
+            raise ValueError("offline_params does not contain valid reward history")
+        offline_map = {idx: (k, reward) for idx, k, reward in offline_entries}
+
         plt.figure(figsize=(8, 6))
         for label, params, marker in series:
             if params is None:
                 continue
-            rewards = [sum(p.reward_history) for p in params]
-            ratios = [r / o if o != 0 else 0 for r, o in zip(rewards, offline_rewards)]
-            plt.plot(k_list, ratios, marker=marker, label=f"{label} / OFFline")
+            entries = self._extract_reward_entries(params)
+            ratios = []
+            ks = []
+            for idx, _, reward in entries:
+                if idx not in offline_map:
+                    continue
+                k_val, offline_reward = offline_map[idx]
+                if offline_reward == 0:
+                    continue
+                ks.append(k_val)
+                ratios.append(reward / offline_reward)
+            if not ks:
+                continue
+            plt.plot(ks, ratios, marker=marker, label=f"{label} / OFFline")
 
         plt.xlabel('k (scaling factor)')
         plt.ylabel('Reward Ratio to OFFline')
@@ -98,24 +128,30 @@ class Visualizer:
             ("Robust", robust_params, "x"),
         ]
 
-        k_list = None
-        for _, params, _ in [("OFFline", offline_params, "s")] + series:
-            if params is not None and len(params) > 0:
-                k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
-                break
-        if k_list is None:
-            raise ValueError("No valid params provided for plotting")
         if offline_params is None:
             raise ValueError("offline_params is None, cannot compute regret")
 
-        offline_rewards = [sum(p.reward_history) for p in offline_params]
+        offline_entries = self._extract_reward_entries(offline_params)
+        if not offline_entries:
+            raise ValueError("offline_params does not contain valid reward history")
+        offline_map = {idx: (k, reward) for idx, k, reward in offline_entries}
+
         plt.figure(figsize=(8, 6))
         for label, params, marker in series:
             if params is None:
                 continue
-            rewards = [sum(p.reward_history) for p in params]
-            regrets = [o - r for r, o in zip(rewards, offline_rewards)]
-            plt.plot(k_list, regrets, marker=marker, label=f"OFFline - {label}")
+            entries = self._extract_reward_entries(params)
+            regrets = []
+            ks = []
+            for idx, _, reward in entries:
+                if idx not in offline_map:
+                    continue
+                k_val, offline_reward = offline_map[idx]
+                ks.append(k_val)
+                regrets.append(offline_reward - reward)
+            if not ks:
+                continue
+            plt.plot(ks, regrets, marker=marker, label=f"OFFline - {label}")
 
         plt.xlabel('k (scaling factor)')
         plt.ylabel('Regret (OFFline - Other)')
@@ -134,7 +170,11 @@ class Visualizer:
         k_list = None
         for params in [rabbi_params, nplus1_params, topklp_params, robust_params]:
             if params is not None and len(params) > 0:
-                k_list = params[0].k if hasattr(params[0], 'k') else list(range(len(params)))
+                entry = next((p for p in params if p is not None), None)
+                if entry is not None and hasattr(entry, 'k'):
+                    k_list = entry.k
+                else:
+                    k_list = list(range(len(params)))
                 break
         if k_list is None:
             print("Warning: No valid params provided for plotting")
@@ -144,6 +184,8 @@ class Visualizer:
         if rabbi_params is not None:
             rabbi_ratios = []
             for p in rabbi_params:
+                if p is None:
+                    continue
                 x_bench = compute_lp_x_benchmark(p)
                 ratio = np.mean(np.array(x_bench) >= 1)
                 rabbi_ratios.append(ratio)
@@ -151,6 +193,8 @@ class Visualizer:
         if nplus1_params is not None:
             nplus1_ratios = []
             for p in nplus1_params:
+                if p is None:
+                    continue
                 x_bench = compute_lp_x_benchmark(p)
                 ratio = np.mean(np.array(x_bench) >= 1)
                 nplus1_ratios.append(ratio)
@@ -158,6 +202,8 @@ class Visualizer:
         if topklp_params is not None:
             topklp_ratios = []
             for p in topklp_params:
+                if p is None:
+                    continue
                 x_bench = compute_lp_x_benchmark(p)
                 ratio = np.mean(np.array(x_bench) >= 1)
                 topklp_ratios.append(ratio)
@@ -165,6 +211,8 @@ class Visualizer:
         if robust_params is not None:
             robust_ratios = []
             for p in robust_params:
+                if p is None:
+                    continue
                 x_bench = compute_lp_x_benchmark(p)
                 ratio = np.mean(np.array(x_bench) >= 1)
                 robust_ratios.append(ratio)

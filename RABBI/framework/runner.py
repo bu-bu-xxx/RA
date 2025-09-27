@@ -1,7 +1,7 @@
 """Runner orchestration using DI and standardized results.
 Preserves existing behavior without renaming functions.
 """
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 import copy
 import os
 import concurrent.futures
@@ -118,6 +118,19 @@ def _prepare_cache_entry(params, config_data) -> Dict[str, object]:
     if hasattr(stored_params, "k"):
         stored_params.k = None
     return {"params": stored_params, "config": copy.deepcopy(config_data)}
+
+
+def _log_task_schedule(context: str, param_file: str, y_prefix: str, solver_names: Sequence[str],
+                       k_values: Iterable[float], tasks: Sequence[Tuple[int, float, str, str, str, Optional[int]]],
+                       max_concurrency: Optional[int], seed: Optional[int]) -> None:
+    total_tasks = len(tasks)
+    print(
+        f"[{context}] param={param_file}, y_prefix={y_prefix}, solvers={list(solver_names)}, "
+        f"k_values={[float(k) for k in k_values]}, pending_tasks={total_tasks}, max_concurrency={max_concurrency}, seed={seed}",
+        flush=True,
+    )
+    for task_idx, k_val, _p, _y, solver_name, _seed in tasks:
+        print(f"  - task#{task_idx} solver={solver_name} k={float(k_val)} (scheduled)", flush=True)
 
 
 def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
@@ -300,14 +313,16 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
     failed_entries: set[Tuple[str, int]] = set()
 
     if pending_tasks:
-        total_tasks = len(pending_tasks)
-        print(
-            f"[run_multi_k_with_cache] param={param_file}, y_prefix={y_prefix}, solvers={solver_names}, "
-            f"k_values={[float(k) for k in k_values]}, pending_tasks={total_tasks}, max_concurrency={max_concurrency}, seed={seed}",
-            flush=True,
+        _log_task_schedule(
+            "run_multi_k_with_cache",
+            param_file,
+            y_prefix,
+            solver_names,
+            k_values,
+            pending_tasks,
+            max_concurrency,
+            seed,
         )
-        for task_idx, k_val, _p, _y, s, _seed in pending_tasks:
-            print(f"  - task#{task_idx} solver={s} k={float(k_val)} (scheduled)", flush=True)
         max_workers = max_concurrency or os.cpu_count()
         task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _y, solver_name, _seed in pending_tasks}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -379,6 +394,16 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                 miss_ptr += 1
 
     if missing_tasks:
+        _log_task_schedule(
+            "run_multi_k_with_cache:fallback",
+            param_file,
+            y_prefix,
+            solver_names,
+            k_values,
+            missing_tasks,
+            max_concurrency,
+            seed,
+        )
         max_workers = max_concurrency or os.cpu_count()
         task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _y, solver_name, _seed in missing_tasks}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -414,5 +439,12 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                     f"[done] task#{task_idx} solver={solver_name} k={float(k_val)} total_reward={total:.4f} steps={steps}{extras_suffix}",
                     flush=True,
                 )
+
+    if not pending_tasks and not missing_tasks:
+        print(
+            f"[run_multi_k_with_cache] param={param_file}, y_prefix={y_prefix}, solvers={solver_names}, "
+            f"k_values={[float(k) for k in k_values]}, pending_tasks=0, reused_from_cache=True",
+            flush=True,
+        )
 
     return results_dict
