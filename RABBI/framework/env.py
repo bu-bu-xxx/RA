@@ -121,9 +121,6 @@ class ParamsLoader:
                     skip_flag = True
                     continue
                 val = float(value)
-                if val >= 1e7:
-                    skip_flag = True
-                    continue
                 row_prices.append(val)
             if not row_prices:
                 raise ValueError("Every product must have at least one finite price option")

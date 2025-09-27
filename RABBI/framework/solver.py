@@ -597,6 +597,8 @@ class Robust(LPBasedPolicy):
         self.eta = float(getattr(env.params, 'eta', 1e-8))  # math: η > 0
         # new-add: how many violators to add each iteration (top-k)
         self.topk = min(int(getattr(env.params, 'topk', 10000000)), env.params.m)
+        # locate existing all-null assortment column if available (all products skipped)
+        self.null_alpha_idx = self._locate_null_assortment()
 
     # --------- helpers implementing mathematics in Robust-RABBI ---------
     def _feasible_products_mask(self, b: np.ndarray) -> np.ndarray:
@@ -713,6 +715,16 @@ class Robust(LPBasedPolicy):
         order = np.argsort(-v)
         return v, order
 
+    def _locate_null_assortment(self) -> int | None:
+        """Locate an existing column where no products are offered (all skipped)."""
+        offer_mask = getattr(self.env.params, 'offer_mask', None)
+        if offer_mask is None:
+            return None
+        null_cols = np.where(~offer_mask.any(axis=0))[0]
+        if null_cols.size > 0:
+            return int(null_cols[0])
+        return None
+
     def run(self):
         """New-added method: main loop of Robust-RABBI, per Robust-RABBI.md.
         Steps per t: Feasibility filter → compute coefficients → Column generation
@@ -739,10 +751,14 @@ class Robust(LPBasedPolicy):
                 # Step 1 & 2: feasibility-aware coefficients
                 r_all, C_all = self._filtered_coefficients(b)  # math: r_α, C_{k,α}
 
-                # ensure null assortment column (all products skipped) exists for feasibility
-                null_alpha = r_all.shape[0]
-                r_all = np.append(r_all, 0.0)
-                C_all = np.concatenate([C_all, np.zeros((C_all.shape[0], 1))], axis=1)
+                null_alpha = self.null_alpha_idx
+                synthetic_null = False
+                if null_alpha is None:
+                    # fallback: ensure feasibility by adding synthetic null column
+                    null_alpha = r_all.shape[0]
+                    r_all = np.append(r_all, 0.0)
+                    C_all = np.concatenate([C_all, np.zeros((C_all.shape[0], 1))], axis=1)
+                    synthetic_null = True
 
                 # Step 3: dual-guided column generation
                 A_prime: list[int] = []  # new-add: discovered columns set 𝒜'_t
@@ -750,7 +766,8 @@ class Robust(LPBasedPolicy):
                 if original_m > 0:
                     seed_alpha = int(np.argmax(r_all[:original_m]))
                     A_prime.append(seed_alpha)
-                A_prime.append(null_alpha)
+                if null_alpha is not None and null_alpha not in A_prime:
+                    A_prime.append(null_alpha)
                 current_A_prime_size = len(A_prime)
 
                 iter_cnt = 0
@@ -768,7 +785,10 @@ class Robust(LPBasedPolicy):
                     # add top-k violating columns this iteration
                     added = 0
                     for idx in order:
-                        if idx == null_alpha:
+                        if idx == null_alpha and not synthetic_null:
+                            # keep existing null assortment but avoid re-adding
+                            continue
+                        if idx == null_alpha and synthetic_null and idx in A_prime:
                             continue
                         if viol[idx] <= self.eta:
                             break
@@ -794,6 +814,9 @@ class Robust(LPBasedPolicy):
                 for i, alpha in enumerate(A_prime):
                     if alpha < original_m:
                         x_full[alpha] = x_sub[i]
+                    elif synthetic_null and alpha == null_alpha:
+                        # synthetic null column is outside original m; skip assignment
+                        continue
                 env.params.x_history.append(x_full)
 
                 # Step 5: choose menu with largest score among feasible ones
