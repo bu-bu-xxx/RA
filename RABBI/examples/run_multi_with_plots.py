@@ -14,8 +14,8 @@ from framework.viz import Visualizer
 
 def main():
     param_file = os.path.join(ROOT, 'params', 'params5.yml')
-    y_prefix = os.path.join(ROOT, 'data', 'Y', 'Y_matrix_params5')
-    os.makedirs(os.path.join(ROOT, 'data', 'Y'), exist_ok=True)
+    qy_prefix = os.path.join(ROOT, 'data', 'QY', 'qy_params5')
+    os.makedirs(os.path.join(ROOT, 'data', 'QY'), exist_ok=True)
     os.makedirs(os.path.join(ROOT, 'data', 'pics'), exist_ok=True)
 
     # Select solvers by name
@@ -26,7 +26,7 @@ def main():
         solver_mod.Robust,
     ]
 
-    results = run_multi_k(param_file, y_prefix, solver_classes, max_concurrency=None, seed=42)
+    results = run_multi_k(param_file, qy_prefix, solver_classes, max_concurrency=None, seed=42)
 
     viz = Visualizer()
     viz.generate_plots(results,

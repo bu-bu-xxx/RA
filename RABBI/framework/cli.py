@@ -24,14 +24,16 @@ def main():
     p_single = sub.add_parser("single")
     p_single.add_argument("--param", required=True)
     p_single.add_argument("--solver", required=True)
-    p_single.add_argument("--y-prefix", required=False, default=None)
+    p_single.add_argument("--qy-prefix", required=False, default=None,
+                          help="Prefix for caching Y/Q arrays, e.g. data/QY/qy_params5")
     p_single.add_argument("--seed", type=int, default=42)
     p_single.add_argument("--debug", action="store_true", default=False, help="Enable verbose debug logs for single run only")
     p_single.add_argument("-k", "--k", type=float, default=1.0, help="Scale factor k (>=0). Scales horizon T and budget B by k; default 1.0")
 
     p_multi = sub.add_parser("multi")
     p_multi.add_argument("--param", required=True)
-    p_multi.add_argument("--y-prefix", required=True)
+    p_multi.add_argument("--qy-prefix", required=True,
+                         help="Prefix for caching Y/Q arrays, e.g. data/QY/qy_params5")
     p_multi.add_argument(
         "--solvers",
         nargs="+",
@@ -48,7 +50,8 @@ def main():
 
     p_cache = sub.add_parser("cache")
     p_cache.add_argument("--param", required=True)
-    p_cache.add_argument("--y-prefix", required=True)
+    p_cache.add_argument("--qy-prefix", required=True,
+                         help="Prefix for caching Y/Q arrays, e.g. data/QY/qy_params5")
     p_cache.add_argument(
         "--solvers",
         nargs="+",
@@ -81,12 +84,12 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "single":
-        res = run_single(args.param, args.y_prefix, args.solver, seed=args.seed, k_val=args.k, debug=args.debug)
+        res = run_single(args.param, args.qy_prefix, args.solver, seed=args.seed, k_val=args.k, debug=args.debug)
     elif args.cmd == "multi":
         # Dynamically resolve solver classes by name from local solver module
         from . import solver as solver_mod
         solver_classes = [getattr(solver_mod, name) for name in args.solvers]
-        results = run_multi_k(args.param, args.y_prefix, solver_classes,
+        results = run_multi_k(args.param, args.qy_prefix, solver_classes,
                               max_concurrency=args.max_concurrency, seed=args.seed)
         for name, plist in results.items():
             totals = [sum(p.reward_history) for p in plist]
@@ -100,7 +103,7 @@ def main():
         os.makedirs(args.shelve_dir, exist_ok=True)
         prefix = args.shelve_prefix or ""
         shelve_paths = {name: os.path.join(args.shelve_dir, f"{prefix}params_{name.lower()}.shelve") for name in args.solvers}
-        results = run_multi_k_with_cache(args.param, args.y_prefix, solver_classes,
+        results = run_multi_k_with_cache(args.param, args.qy_prefix, solver_classes,
                                          max_concurrency=args.max_concurrency, seed=args.seed,
                                          shelve_paths=shelve_paths)
         for name, plist in results.items():

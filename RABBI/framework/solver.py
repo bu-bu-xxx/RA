@@ -64,7 +64,8 @@ class RABBI(LPBasedPolicy):
         for t in range(env.params.T):
             p_t = env.params.p
             x_t = self.solve_lp(b, p_t, t, env.params.n, env.params.m, env.params.d, env.params.f, env.params.A, env.params.T)
-            self.params.x_history.append(x_t)
+            if getattr(self, 'debug', False) and isinstance(self.params.x_history, list):
+                self.params.x_history.append(x_t)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
             if getattr(self, 'debug', False):
@@ -91,7 +92,8 @@ class OFFline(LPBasedPolicy):
         for t in range(env.params.T):
             p_t = env.params.Q[t, :, :]
             x_t = self.solve_lp(b, p_t, t, env.params.n, env.params.m, env.params.d, env.params.f, env.params.A, env.params.T)
-            self.params.x_history.append(x_t)
+            if getattr(self, 'debug', False) and isinstance(self.params.x_history, list):
+                self.params.x_history.append(x_t)
             alpha = int(np.argmax(x_t))
             j = Y[t, alpha]
             if getattr(self, 'debug', False):
@@ -355,7 +357,8 @@ class NPlusOneLP(LPBasedPolicy):
                 col_mask = sel_mask_matrix[:, alpha] if sel_mask_matrix is not None else None
                 print(f"[NPlusOneLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
             env.step(j, alpha)
-            self.params.x_history.append(x_t)
+            if getattr(self, 'debug', False) and isinstance(self.params.x_history, list):
+                self.params.x_history.append(x_t)
             b = env.params.b.copy()
 
 
@@ -577,7 +580,8 @@ class TopKLP(LPBasedPolicy):
                 col_mask = sel_mask_matrix[:, alpha] if sel_mask_matrix is not None else None
                 print(f"[TopKLP] t={t} b={b} alpha={alpha} j={j} zeta_sum={zeta_star.sum():.4f} selected_prices={_format_prices_vec(sel_prices, col_mask)}")
             env.step(j, alpha)
-            env.params.x_history.append(x_t)
+            if getattr(self, 'debug', False) and isinstance(env.params.x_history, list):
+                env.params.x_history.append(x_t)
             b = env.params.b.copy()
 
 
@@ -729,7 +733,7 @@ class Robust(LPBasedPolicy):
         """New-added method: main loop of Robust-RABBI, per Robust-RABBI.md.
         Steps per t: Feasibility filter → compute coefficients → Column generation
         (dual separation + restricted primal) → choose menu by max score → simulate and update.
-        Maintains x_history with full dimension m (fill 0 for non-selected columns).
+    When debug is enabled, maintains x_history with full dimension m (fill 0 for non-selected columns).
         """
         env = self.env
         env.reset()
@@ -817,7 +821,8 @@ class Robust(LPBasedPolicy):
                     elif synthetic_null and alpha == null_alpha:
                         # synthetic null column is outside original m; skip assignment
                         continue
-                env.params.x_history.append(x_full)
+                if getattr(self, 'debug', False) and isinstance(env.params.x_history, list):
+                    env.params.x_history.append(x_full)
 
                 # Step 5: choose menu with largest score among feasible ones
                 alpha = int(np.argmax(x_full))  # math: α_t ∈ argmax score(α)

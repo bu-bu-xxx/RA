@@ -48,7 +48,7 @@ def _extract_error_detail(exc: BaseException) -> str:
 
 
 def _describe_task(task_args: Tuple[int, float, str, str, str, Optional[int]]) -> str:
-    task_idx, k_val, _param_file, _y_prefix, solver_name, _seed = task_args
+    task_idx, k_val, _param_file, _qy_prefix, solver_name, _seed = task_args
     try:
         k_numeric = float(k_val)
     except (TypeError, ValueError):
@@ -114,61 +114,77 @@ def _entry_matches_signature(entry, signature: str) -> bool:
 
 
 def _prepare_cache_entry(params, config_data) -> Dict[str, object]:
-    stored_params = copy.deepcopy(params)
+    heavy_attrs = {}
+    for attr in ("Y", "Q"):
+        if hasattr(params, attr):
+            heavy_attrs[attr] = getattr(params, attr)
+            setattr(params, attr, None)
+
+    try:
+        stored_params = copy.deepcopy(params)
+    finally:
+        for attr, value in heavy_attrs.items():
+            setattr(params, attr, value)
+
+    for attr in ("Y", "Q", "x_history"):
+        if hasattr(stored_params, attr):
+            setattr(stored_params, attr, None)
     if hasattr(stored_params, "k"):
         stored_params.k = None
     return {"params": stored_params, "config": copy.deepcopy(config_data)}
 
 
-def _log_task_schedule(context: str, param_file: str, y_prefix: str, solver_names: Sequence[str],
+def _log_task_schedule(context: str, param_file: str, qy_prefix: str, solver_names: Sequence[str],
                        k_values: Iterable[float], tasks: Sequence[Tuple[int, float, str, str, str, Optional[int]]],
                        max_concurrency: Optional[int], seed: Optional[int]) -> None:
     total_tasks = len(tasks)
     print(
-        f"[{context}] param={param_file}, y_prefix={y_prefix}, solvers={list(solver_names)}, "
+        f"[{context}] param={param_file}, qy_prefix={qy_prefix}, solvers={list(solver_names)}, "
         f"k_values={[float(k) for k in k_values]}, pending_tasks={total_tasks}, max_concurrency={max_concurrency}, seed={seed}",
         flush=True,
     )
-    for task_idx, k_val, _p, _y, solver_name, _seed in tasks:
+    for task_idx, k_val, _p, _qy, solver_name, _seed in tasks:
         print(f"  - task#{task_idx} solver={solver_name} k={float(k_val)} (scheduled)", flush=True)
 
 
 def _universal_worker(args: Tuple[int, float, str, str, str, Optional[int]]):
     """Worker compatible with concurrent.futures for multi-k runs.
-    Args: (task_idx, k_val, param_file, y_prefix, solver_name, seed)
+    Args: (task_idx, k_val, param_file, qy_prefix, solver_name, seed)
     Returns: (task_idx, params, solver_name)
     """
-    task_idx, k_val, param_file, y_prefix, solver_name, seed = args
-    container = Container(param_file, seed=seed, y_prefix=y_prefix)
+    task_idx, k_val, param_file, qy_prefix, solver_name, seed = args
+    container = Container(param_file, seed=seed, qy_prefix=qy_prefix)
     sim = container.make_sim()
     # scale by k
     sim.params.B = sim.params.B * k_val
     sim.params.T = int(sim.params.T * k_val)
-    container.prepare_Y(sim, k_val=k_val)
+    container.prepare_qy(sim, k_val=k_val)
     # compute offline Q for all solvers to enable LP benchmark and parity with original main
-    sim.compute_offline_Q()
+    if getattr(sim.params, "Q", None) is None:
+        sim.compute_offline_Q()
     solver = container.make_solver(solver_name, sim, debug=False)
     solver.run()
     return (task_idx, sim.params, solver_name)
 
 
-def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed: Optional[int] = None,
+def run_single(param_file: str, qy_prefix: Optional[str], solver_name: str, seed: Optional[int] = None,
                k_val: Optional[float] = None, debug: bool = False) -> RunResult:
-    print(f"[run_single] param={param_file}, y_prefix={y_prefix}, solver={solver_name}, seed={seed}, k={k_val}", flush=True)
-    container = Container(param_file, seed=seed, y_prefix=y_prefix)
+    print(f"[run_single] param={param_file}, qy_prefix={qy_prefix}, solver={solver_name}, seed={seed}, k={k_val}", flush=True)
+    container = Container(param_file, seed=seed, qy_prefix=qy_prefix)
     sim = container.make_sim()
     if k_val is not None:
         sim.params.B = sim.params.B * k_val
         sim.params.T = int(sim.params.T * k_val)
-    container.prepare_Y(sim, k_val=k_val)
+    container.prepare_qy(sim, k_val=k_val)
     # For compatibility with compute_lp_x_benchmark, compute Q regardless of solver
-    sim.compute_offline_Q()
+    if getattr(sim.params, "Q", None) is None:
+        sim.compute_offline_Q()
     solver = container.make_solver(solver_name, sim, debug=debug)
     try:
         solver.run()
     except Exception as exc:  # pragma: no cover - pass-through for logging at caller
         effective_k = k_val if k_val is not None else 1.0
-        _log_task_error("run_single", (0, effective_k, param_file, y_prefix, solver_name, seed), exc)
+        _log_task_error("run_single", (0, effective_k, param_file, qy_prefix, solver_name, seed), exc)
         raise
     total = compute_total_reward(sim.params)
     steps = len(sim.params.reward_history)
@@ -181,7 +197,7 @@ def run_single(param_file: str, y_prefix: Optional[str], solver_name: str, seed:
     return RunResult(solver_name=solver_name, k_val=k_val, params=sim.params, total_reward=total)
 
 
-def run_multi_k(param_file: str, y_prefix: str, solver_classes: Sequence[type], max_concurrency: Optional[int] = None,
+def run_multi_k(param_file: str, qy_prefix: str, solver_classes: Sequence[type], max_concurrency: Optional[int] = None,
                 seed: Optional[int] = None) -> Dict[str, List[object]]:
     """Compatibility wrapper that returns dict[solver_name] -> List[params] like main.run_multi_k."""
     if max_concurrency is None:
@@ -191,20 +207,20 @@ def run_multi_k(param_file: str, y_prefix: str, solver_classes: Sequence[type], 
     solver_names = [cls.__name__ for cls in solver_classes]
 
     # Prepare k values using a temporary sim
-    container = Container(param_file, seed=seed, y_prefix=y_prefix)
+    container = Container(param_file, seed=seed, qy_prefix=qy_prefix)
     sim = container.make_sim()
     k_values = sim.params.k
 
     all_args = []
     for solver_name in solver_names:
         for i, k_val in enumerate(k_values):
-            all_args.append((len(all_args), k_val, param_file, y_prefix, solver_name, seed))
+            all_args.append((len(all_args), k_val, param_file, qy_prefix, solver_name, seed))
     print(
-        f"[run_multi_k] param={param_file}, y_prefix={y_prefix}, solvers={solver_names}, "
+    f"[run_multi_k] param={param_file}, qy_prefix={qy_prefix}, solvers={solver_names}, "
         f"k_values={[float(k) for k in k_values]}, max_concurrency={max_concurrency}, seed={seed}, tasks={len(all_args)}",
         flush=True,
     )
-    for task_idx, k_val, _p, _y, s, _seed in all_args:
+    for task_idx, k_val, _p, _qy, s, _seed in all_args:
         print(f"  - task#{task_idx} solver={s} k={float(k_val)}", flush=True)
 
     future_map: Dict[concurrent.futures.Future, Tuple[int, float, str, str, str, Optional[int]]] = {}
@@ -255,14 +271,14 @@ def run_multi_k(param_file: str, y_prefix: str, solver_classes: Sequence[type], 
     return results_dict
 
 
-def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Sequence[type], max_concurrency: Optional[int] = None,
+def run_multi_k_with_cache(param_file: str, qy_prefix: str, solver_classes: Sequence[type], max_concurrency: Optional[int] = None,
                             shelve_paths: Optional[Dict[str, str]] = None, seed: Optional[int] = None) -> Dict[str, List[object]]:
     """Compatibility wrapper mirroring main.run_multi_k_with_cache signature/behavior, but centralized here.
     Returns dict[solver_name] -> List[params], where each list aligns with k values.
     """
     import shelve
 
-    container = Container(param_file, seed=seed, y_prefix=y_prefix)
+    container = Container(param_file, seed=seed, qy_prefix=qy_prefix)
     sim = container.make_sim()
     k_values = sim.params.k
     config_data = _load_config_data(param_file)
@@ -281,7 +297,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
             # schedule all tasks without caching
             for k_idx, k_val in enumerate(k_values):
                 index_map[task_ptr] = (solver_name, k_idx)
-                pending_tasks.append((task_ptr, k_val, param_file, y_prefix, solver_name, seed))
+                pending_tasks.append((task_ptr, k_val, param_file, qy_prefix, solver_name, seed))
                 task_ptr += 1
             continue
         # try read cache keys
@@ -298,13 +314,13 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
                         except Exception:
                             pass
                         index_map[task_ptr] = (solver_name, k_idx)
-                        pending_tasks.append((task_ptr, k_val, param_file, y_prefix, solver_name, seed))
+                        pending_tasks.append((task_ptr, k_val, param_file, qy_prefix, solver_name, seed))
                         task_ptr += 1
         except (OSError, RuntimeError):
             # if shelve broken, schedule all
             for k_idx, k_val in enumerate(k_values):
                 index_map[task_ptr] = (solver_name, k_idx)
-                pending_tasks.append((task_ptr, k_val, param_file, y_prefix, solver_name, seed))
+                pending_tasks.append((task_ptr, k_val, param_file, qy_prefix, solver_name, seed))
                 task_ptr += 1
 
     # run pending
@@ -316,7 +332,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
         _log_task_schedule(
             "run_multi_k_with_cache",
             param_file,
-            y_prefix,
+            qy_prefix,
             solver_names,
             k_values,
             pending_tasks,
@@ -324,7 +340,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
             seed,
         )
         max_workers = max_concurrency or os.cpu_count()
-        task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _y, solver_name, _seed in pending_tasks}
+        task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _qy, solver_name, _seed in pending_tasks}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             future_map = {executor.submit(_universal_worker, t): t for t in pending_tasks}
             for fut in as_completed(future_map):
@@ -390,14 +406,14 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
         for k_idx, k_val in enumerate(k_values):
             if results_dict[solver_name][k_idx] is None and (solver_name, k_idx) not in failed_entries:
                 missing_index_map[miss_ptr] = (solver_name, k_idx)
-                missing_tasks.append((miss_ptr, float(k_val), param_file, y_prefix, solver_name, seed))
+                missing_tasks.append((miss_ptr, float(k_val), param_file, qy_prefix, solver_name, seed))
                 miss_ptr += 1
 
     if missing_tasks:
         _log_task_schedule(
             "run_multi_k_with_cache:fallback",
             param_file,
-            y_prefix,
+            qy_prefix,
             solver_names,
             k_values,
             missing_tasks,
@@ -405,7 +421,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
             seed,
         )
         max_workers = max_concurrency or os.cpu_count()
-        task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _y, solver_name, _seed in missing_tasks}
+        task_info_by_idx = {task_idx: (k_val, solver_name) for task_idx, k_val, _p, _qy, solver_name, _seed in missing_tasks}
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             future_map = {executor.submit(_universal_worker, t): t for t in missing_tasks}
             for fut in as_completed(future_map):
@@ -442,7 +458,7 @@ def run_multi_k_with_cache(param_file: str, y_prefix: str, solver_classes: Seque
 
     if not pending_tasks and not missing_tasks:
         print(
-            f"[run_multi_k_with_cache] param={param_file}, y_prefix={y_prefix}, solvers={solver_names}, "
+            f"[run_multi_k_with_cache] param={param_file}, qy_prefix={qy_prefix}, solvers={solver_names}, "
             f"k_values={[float(k) for k in k_values]}, pending_tasks=0, reused_from_cache=True",
             flush=True,
         )

@@ -22,6 +22,6 @@ from framework.runner import run_single
 def test_run_single_smoke():
     param = os.path.join(os.path.dirname(__file__), "params_min.yml")
     for solver_name in ("RABBI", "Robust"):
-        res = run_single(param, y_prefix=None, solver_name=solver_name, seed=123)
+        res = run_single(param, qy_prefix=None, solver_name=solver_name, seed=123)
         assert res.total_reward >= 0
         assert res.params is not None

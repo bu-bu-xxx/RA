@@ -34,12 +34,12 @@ cd RABBI
 python3 -m pip install -r requirements.txt
 ```
 
-Create folders for data and pics (if not present):
+Create folders for data and cache artifacts (if not present):
 
 ```bash
 # Run from inside the RABBI folder
 cd RABBI
-mkdir -p data/Y data/shelve data/pics
+mkdir -p data/QY data/shelve data/pics
 ```
 
 ### Single run
@@ -60,7 +60,7 @@ python3 -m cli single \
 cd RABBI
 python3 -m cli multi \
   --param params/params5.yml \
-  --y-prefix data/Y/Y_matrix_params5 \
+  --qy-prefix data/QY/qy_params5 \
   --solvers OFFline NPlusOneLP Robust \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
   --plot-dir data/pics \
@@ -74,7 +74,7 @@ python3 -m cli multi \
 cd RABBI
 python3 -m cli cache \
   --param params/params5.yml \
-  --y-prefix data/Y/Y_matrix_params5 \
+  --qy-prefix data/QY/qy_params5 \
   --solvers OFFline NPlusOneLP Robust \
   --max-concurrency 4 \
   --shelve-dir data/shelve \
@@ -95,6 +95,17 @@ python3 -m cli multi -h
 
 Available solver names: RABBI, OFFline, NPlusOneLP, TopKLP, Robust
 
+### Q/Y disk cache workflow
+
+- Use `--qy-prefix <prefix>` to tell the runner where to persist/reuse Y and Q matrices.
+- When set, the container writes `{prefix}_Y.npy` and `{prefix}_Q.npy` under `data/QY` (create the directory if you prefer a different path).
+- Subsequent runs memory-map these arrays instead of loading them fully, keeping peak RAM low even for large horizons.
+- Cache entries purposely omit these heavy arrays; when a cached result is loaded, the runner regenerates or reuses the `.npy` files transparently.
+
+### Debug-only trajectories
+
+- Solver `x_history` vectors are only populated when `--debug` is passed. This makes cached params leaner while retaining deep traces for troubleshooting.
+
 ### Plot output options
 
 - Use `--plot-prefix <prefix>` to prepend a prefix to generated image filenames.
@@ -110,7 +121,7 @@ Available solver names: RABBI, OFFline, NPlusOneLP, TopKLP, Robust
 
 Runs print progress to stdout:
 
-- Start banner with parameters: `param`, `y_prefix`, `solvers`, `k_values`, `max_concurrency`, `seed`, task count
+- Start banner with parameters: `param`, `qy_prefix`, `solvers`, `k_values`, `max_concurrency`, `seed`, task count
 - Per-task schedule lines: `- task#<idx> solver=<name> k=<value>`
 - Per-task completion lines: `[done] task#<idx> solver=<name> k=<value> total_reward=<sum> steps=<T>`
 - `run_single` prints a start line and a completion summary.
@@ -175,12 +186,12 @@ Run a comprehensive smoke test covering all solvers (RABBI, OFFline, NPlusOneLP,
 
 ```bash
 # Ensure required directories exist
-mkdir -p data/Y data/pics data/shelve
+mkdir -p data/QY data/pics data/shelve
 
 # Multi-k with all solvers and plots
 python3 -m cli multi \
   --param tests/params_min.yml \
-  --y-prefix data/Y/Y_matrix_params_min \
+  --qy-prefix data/QY/qy_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP Robust \
   --plots multi_k_results multi_k_ratio multi_k_regret lp_x_benchmark_ratio \
   --plot-dir data/pics
@@ -188,7 +199,7 @@ python3 -m cli multi \
 # Cache mode to create shelve artifacts
 python3 -m cli cache \
   --param tests/params_min.yml \
-  --y-prefix data/Y/Y_matrix_params_min \
+  --qy-prefix data/QY/qy_params_min \
   --solvers RABBI OFFline NPlusOneLP TopKLP Robust \
   --shelve-dir data/shelve \
   --plots multi_k_results \
@@ -203,7 +214,7 @@ ls -1 data/shelve
 
 - **ValueError: `x and y must have same first dimension` during cached plot generation** – occurs when cached shelve/Y data from a previous run (with a different `scaling_list`) is reused. Clear cached artifacts before re-running:
   ```bash
-  rm -rf data/Y/* data/shelve/* data/pics/*
+  rm -rf data/QY/* data/shelve/* data/pics/*
   ```
   After clearing, rerun the cache command; the plots will regenerate with matching dimensions.
 

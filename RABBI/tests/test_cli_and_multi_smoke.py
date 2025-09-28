@@ -32,14 +32,14 @@ from framework.runner import run_multi_k
 def test_run_multi_k_all_solvers_smoke():
     # Use params_min.yml for speed and determinism
     param = os.path.join(THIS_DIR, "params_min.yml")
-    y_prefix = os.path.join(REFAC_ROOT, "data", "Y", "Y_matrix_params_min")
-    os.makedirs(os.path.dirname(y_prefix), exist_ok=True)
+    qy_prefix = os.path.join(REFAC_ROOT, "data", "QY", "qy_params_min")
+    os.makedirs(os.path.dirname(qy_prefix), exist_ok=True)
 
     # Import solver classes dynamically
     from framework import solver as solver_mod
     solver_classes = [getattr(solver_mod, name) for name in ("RABBI", "OFFline", "NPlusOneLP", "TopKLP", "Robust")]
 
-    results = run_multi_k(param, y_prefix, solver_classes, max_concurrency=2, seed=42)
+    results = run_multi_k(param, qy_prefix, solver_classes, max_concurrency=2, seed=42)
 
     # Basic assertions: keys exist, each k entry has params with non-empty reward_history
     assert set(results.keys()) == {"RABBI", "OFFline", "NPlusOneLP", "TopKLP", "Robust"}
@@ -55,10 +55,10 @@ def test_run_multi_k_all_solvers_smoke():
 def test_cli_multi_plots_and_cache_smoke():
     # Prepare paths
     param = os.path.join(THIS_DIR, "params_min.yml")
-    y_prefix = os.path.join(REFAC_ROOT, "data", "Y", "Y_matrix_params_min")
+    qy_prefix = os.path.join(REFAC_ROOT, "data", "QY", "qy_params_min")
     pics_dir = os.path.join(REFAC_ROOT, "data", "pics")
     shelve_dir = os.path.join(REFAC_ROOT, "data", "shelve")
-    os.makedirs(os.path.dirname(y_prefix), exist_ok=True)
+    os.makedirs(os.path.dirname(qy_prefix), exist_ok=True)
     os.makedirs(pics_dir, exist_ok=True)
     os.makedirs(shelve_dir, exist_ok=True)
 
@@ -70,20 +70,20 @@ def test_cli_multi_plots_and_cache_smoke():
         "multi",
         "--param",
         param,
-        "--y-prefix",
-        y_prefix,
+        "--qy-prefix",
+        qy_prefix,
         "--solvers",
         "RABBI",
         "OFFline",
         "NPlusOneLP",
         "TopKLP",
-    "Robust",
+        "Robust",
         "--plots",
         "multi_k_results",
         "multi_k_ratio",
         "multi_k_regret",
         "lp_x_benchmark_ratio",
-    "--plot-dir",
+        "--plot-dir",
         pics_dir,
     ]
     # Run from repo root so module resolution works
@@ -108,19 +108,19 @@ def test_cli_multi_plots_and_cache_smoke():
         "cache",
         "--param",
         param,
-        "--y-prefix",
-        y_prefix,
+        "--qy-prefix",
+        qy_prefix,
         "--solvers",
         "RABBI",
         "OFFline",
         "NPlusOneLP",
         "TopKLP",
-    "Robust",
+        "Robust",
         "--shelve-dir",
         shelve_dir,
         "--plots",
         "multi_k_results",
-    "--plot-dir",
+        "--plot-dir",
         pics_dir,
     ]
     proc2 = subprocess.run(cmd_cache, cwd=REFAC_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
