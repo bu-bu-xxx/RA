@@ -50,6 +50,7 @@ class Container:
 
     def prepare_qy(self, sim, k_val: Optional[float] = None):
         import os
+        import time
         import numpy as np
 
         if self.qy_prefix is None:
@@ -66,19 +67,49 @@ class Container:
         if base_dir:
             os.makedirs(base_dir, exist_ok=True)
 
-        if os.path.exists(y_file):
-            sim.params.Y = np.load(y_file, mmap_mode='r')
-        else:
-            sim.generate_Y_matrix()
-            np.save(y_file, sim.params.Y)
-            sim.params.Y = np.load(y_file, mmap_mode='r')
+        def _acquire_lock(path: str, timeout: Optional[float] = None, poll: float = 0.1) -> str:
+            lock_path = f"{path}.lock"
+            start = time.monotonic()
+            while True:
+                try:
+                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                    os.close(fd)
+                    return lock_path
+                except FileExistsError:
+                    if timeout is not None and (time.monotonic() - start) > timeout:
+                        raise TimeoutError(f"Timed out waiting for lock on {path}")
+                    time.sleep(poll)
 
-        if os.path.exists(q_file):
-            sim.params.Q = np.load(q_file, mmap_mode='r')
-        else:
-            sim.compute_offline_Q()
-            np.save(q_file, sim.params.Q)
-            sim.params.Q = np.load(q_file, mmap_mode='r')
+        def _load_memmap(path: str):
+            return np.load(path, mmap_mode='r')
+
+        def _ensure_array(path: str, producer):
+            try:
+                return _load_memmap(path)
+            except (FileNotFoundError, ValueError, OSError):
+                pass
+
+            lock_path = _acquire_lock(path)
+            try:
+                # Double-check after acquiring lock
+                try:
+                    return _load_memmap(path)
+                except (FileNotFoundError, ValueError, OSError):
+                    pass
+
+                array = producer()
+                tmp_path = f"{path}.tmp.{os.getpid()}.{time.time_ns()}.npy"
+                np.save(tmp_path, array)
+                os.replace(tmp_path, path)
+                return _load_memmap(path)
+            finally:
+                try:
+                    os.remove(lock_path)
+                except FileNotFoundError:
+                    pass
+
+        sim.params.Y = _ensure_array(y_file, lambda: sim.generate_Y_matrix())
+        sim.params.Q = _ensure_array(q_file, lambda: (sim.compute_offline_Q()))
 
     def make_solver(self, name: str, sim, debug: bool = False):
         SolverClass = PolicyRegistry.get_class(name)
