@@ -83,6 +83,18 @@ python3 -m cli cache \
   --plot-prefix exp1_
 ```
 
+### Timed cache helper script
+
+Use the `run_cache.sh` wrapper to run the timed cache command with automatic logging. Pass the numeric suffix of the params/QY/prefix set you want to run:
+
+```bash
+# Run from inside the RABBI folder
+cd RABBI
+./run_cache.sh 7
+```
+
+The script expands the `7` into `params7.yml`, `data/QY/qy_params7_*`, and writes a timestamped log to `tmp/cache_params7_*.log` while streaming `/usr/bin/time -v` output to the terminal. Adjust the number to match the parameter set you need.
+
 ### Available solvers and CLI help
 
 The `--solvers` argument validates and shows available choices in `-h`:

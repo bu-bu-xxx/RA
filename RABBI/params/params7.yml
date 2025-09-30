@@ -1,0 +1,33 @@
+product_number: 5
+resource_number: 25
+resource_matrix: # dimension: product_number x resource_number
+  - [0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0]
+  - [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1]
+  - [0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0]
+  - [0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0]
+  - [0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0]
+price_set_matrix: # dimension: product_number x any
+  - [5, 7, 10, 14, 17, null]
+  - [6, 9, 11, 14, 16, 19, null]
+  - [5, 8, 11, 13, 16, 18, 20, null]
+  - [7, 10, 13, 15, 18, 21, null]
+  - [6, 8, 11, 14, 17, 19, null]
+topk: 9999 # TopKLP & Robust的top-k参数，如果产品数量小于topk，则自动调整为产品数量
+horizon: 20
+budget: [10, 7, 8, 8, 11, 9, 7, 6, 8, 7, 6, 12, 9, 11, 8, 12, 9, 9, 11, 4, 13, 6, 9, 4, 12]  # 每个资源的预算，长度为resource_number
+scaling_list: [1, 5, 10, 20, 50, 100, 200, 300]  # 缩放列表
+demand_model: "MNL"
+
+MNL:
+  d: [12, 11, 9, 13, 8]   # 产品吸引力向量，长度为product_number
+  mu: 9.5           # 理性参数，正数
+  u0: 0.1           # 不购买的效用，默认0
+  gamma: 1.05       # 价格敏感度，正数
+
+# 代表每个产品对自身价格敏感，对其他产品价格也有影响
+tolerance: 1e-4
+
+robust:
+  eta: 1e-8      # Feasibility slack η: stop column generation when max reduced cost ≤ η
+  sep_eps: 1e-6  # Oracle accuracy ε_sep (reserved; current implementation uses η for stopping)
+

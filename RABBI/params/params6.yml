@@ -61,5 +61,5 @@ MNL:
 tolerance: 1e-4
 
 robust:
-  eta: 1e-8      # Feasibility slack η: stop column generation when max reduced cost ≤ η
-  sep_eps: 1e-6  # Oracle accuracy ε_sep (reserved; current implementation uses η for stopping)
+  eta: 1e-4      # Feasibility slack η: stop column generation when max reduced cost ≤ η
+  sep_eps: 1e-2  # Oracle accuracy ε_sep (reserved; current implementation uses η for stopping)
